@@ -1,0 +1,18 @@
+name: Project automation
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  move-to-done:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Closes #N in the PR body will auto-close the issue.
+            // This step is a placeholder for more advanced project-v2 automation
+            // via the GraphQL API if needed.
+            console.log('PR merged — linked issues closed automatically by GitHub.');
