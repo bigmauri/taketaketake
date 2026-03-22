@@ -17,13 +17,16 @@ report bugs, propose features, and submit code changes.
 8. [Code Style](#code-style)
 9. [Testing](#testing)
 10. [Project Structure](#project-structure)
+11. [Questions](#questions)
 
 ---
 
 ## Code of Conduct
 
-This project follows a simple rule: **be respectful**.  
-Constructive criticism of code is welcome; personal attacks are not.
+This project follows a simple rule: **be respectful.**
+Constructive criticism of code is always welcome; personal attacks are not.
+We are committed to providing a welcoming and inclusive environment for everyone,
+regardless of experience level, background, or identity.
 
 ---
 
@@ -31,14 +34,14 @@ Constructive criticism of code is welcome; personal attacks are not.
 
 ### Prerequisites
 
-| Tool | Minimum version | Notes |
-|------|----------------|-------|
-| Python | 3.10 | 3.12 recommended |
-| tkinter | bundled with Python | `sudo apt install python3-tk` on Debian/Ubuntu |
-| git | any recent | — |
+| Tool    | Minimum version | Notes                                        |
+|---------|-----------------|----------------------------------------------|
+| Python  | 3.10            | 3.12 recommended                             |
+| tkinter | bundled         | `sudo apt install python3-tk` on Debian/Ubuntu |
+| git     | any recent      | —                                            |
 
-No third-party Python packages are required to run the application.  
-`pytest` and `pyflakes` are only needed for development.
+No third-party Python packages are required to run the application.
+`pytest` and `pyflakes` are only needed for development work.
 
 ### Local setup
 
@@ -51,7 +54,7 @@ cd taketaketake
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# 3. Install the package in editable mode + dev tools
+# 3. Install the package in editable mode and dev tools
 pip install -e .
 pip install pytest pyflakes
 
@@ -66,25 +69,32 @@ python -m taketaketake
 
 ## How to Report a Bug
 
-1. Search the [existing issues](https://github.com/your-org/taketaketake/issues)
+1. Search the [existing issues](https://github.com/bigmauri/taketaketake/issues)
    to avoid duplicates.
 2. Open a new issue using the **Bug Report** template and include:
    - Operating system and Python version (`python --version`)
-   - Steps to reproduce the problem
+   - Steps to reproduce the problem, as minimal as possible
    - Expected behaviour vs. actual behaviour
    - Any relevant PGN file or move sequence that triggers the bug
    - Full traceback if an exception was raised
+
+The more detail you provide, the faster the issue can be resolved.
 
 ---
 
 ## How to Request a Feature
 
-1. Check the [existing issues](https://github.com/your-org/taketaketake/issues)
-   and [open pull requests](https://github.com/your-org/taketaketake/pulls).
+1. Check the [existing issues](https://github.com/bigmauri/taketaketake/issues)
+   and [open pull requests](https://github.com/bigmauri/taketaketake/pulls) to
+   avoid duplicates.
 2. Open a new issue using the **Feature Request** template.
-3. Describe the use case, not just the implementation.  
-   *"I want to be able to export the current position as a FEN string"*  
-   is more useful than *"add a `to_fen()` method"*.
+3. Describe the **use case**, not just the implementation.
+
+   > *"I want to be able to export the current position as a FEN string"*
+   > is more useful than *"add a `to_fen()` method"*.
+
+Features that keep the project dependency-free and stay within the scope of a
+desktop chess viewer/editor are most likely to be accepted.
 
 ---
 
@@ -105,22 +115,22 @@ test/*      ← test-only additions or changes
 ### Step-by-step
 
 ```bash
-# Start from a fresh develop
+# 1. Start from a fresh develop
 git checkout develop
 git pull origin develop
 
-# Create your branch
+# 2. Create your branch
 git checkout -b feature/en-passant-support
 
-# Make your changes, commit often
+# 3. Make your changes, commit often
 git add -p
 git commit -m "feat(engine): add en-passant capture logic"
 
-# Keep your branch up to date
+# 4. Keep your branch up to date with develop
 git fetch origin
 git rebase origin/develop
 
-# Push and open a PR
+# 5. Push and open a PR
 git push origin feature/en-passant-support
 ```
 
@@ -128,8 +138,7 @@ git push origin feature/en-passant-support
 
 ## Commit Message Convention
 
-We use a simplified version of
-[Conventional Commits](https://www.conventionalcommits.org/):
+We use a simplified version of [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
 <type>(<scope>): <short summary>
@@ -141,21 +150,21 @@ We use a simplified version of
 
 ### Types
 
-| Type | When to use |
-|------|-------------|
-| `feat` | A new feature visible to the user |
-| `fix` | A bug fix |
+| Type       | When to use                                             |
+|------------|---------------------------------------------------------|
+| `feat`     | A new feature visible to the user                       |
+| `fix`      | A bug fix                                               |
 | `refactor` | Code change that neither fixes a bug nor adds a feature |
-| `test` | Adding or updating tests |
-| `docs` | Documentation only |
-| `chore` | Build scripts, CI, dependency bumps |
-| `perf` | Performance improvement |
-| `style` | Formatting, whitespace — no logic change |
+| `test`     | Adding or updating tests                                |
+| `docs`     | Documentation only                                      |
+| `chore`    | Build scripts, CI configuration, dependency bumps       |
+| `perf`     | Performance improvement                                 |
+| `style`    | Formatting or whitespace — no logic change              |
 
 ### Scopes
 
-Use the sub-module name as scope: `engine`, `tree`, `pgn`, `app`, `constants`,
-`tests`, `ci`, `docs`.
+Use the sub-module name as the scope: `engine`, `tree`, `pgn`, `app`,
+`constants`, `tests`, `ci`, `docs`.
 
 ### Examples
 
@@ -174,15 +183,15 @@ chore(ci): add Python 3.13 to test matrix
 
 ### Before opening a PR
 
-- [ ] All existing tests pass: `python -m pytest tests/ -v`
-- [ ] New behaviour is covered by at least one test
-- [ ] `pyflakes` reports no errors on changed files
-- [ ] The branch is rebased on the latest `develop`
-- [ ] The PR description explains *what* changed and *why*
+- All existing tests pass: `python -m pytest tests/ -v`
+- New behaviour is covered by at least one new test
+- `pyflakes` reports no errors on changed files
+- The branch is rebased on the latest `develop`
+- The PR description explains *what* changed and *why*
 
 ### PR title
 
-Follow the same convention as commit messages:
+Follow the same Conventional Commits format used for commit messages:
 
 ```
 feat(pgn): support FEN SetUp header on import
@@ -196,47 +205,50 @@ feat(pgn): support FEN SetUp header on import
 
 ### Merging policy
 
-| Branch target | Strategy | Who can merge |
-|--------------|----------|--------------|
-| `develop` | Squash merge | Maintainers |
-| `main` | Merge commit (tagged release) | Maintainers only |
+| Branch target | Strategy                    | Who can merge     |
+|---------------|-----------------------------|-------------------|
+| `develop`     | Squash merge                | Maintainers       |
+| `main`        | Merge commit (tagged release) | Maintainers only |
 
 ---
 
 ## Code Style
 
 TakeTakeTake has no external linter configuration beyond `pyflakes`. We ask
-for the following:
+contributors to follow the guidelines below.
 
-### General
+### General principles
 
-- **Python 3.10+** syntax only. Do not use features introduced in 3.11+
-  unless the minimum version is bumped accordingly.
-- Prefer **clarity over brevity**. One-liners are fine when obvious;
-  complex logic should be broken into named steps.
-- **No external dependencies.** The entire package must run with the
-  Python standard library only.
+- **Python 3.10+ syntax only.** Do not use features introduced in 3.11 or
+  later unless the minimum supported version is bumped accordingly.
+- Prefer **clarity over brevity.** One-liners are fine when the intent is
+  obvious; complex logic should be broken into named steps with clear variable
+  names.
+- **No external dependencies.** The entire package must run with the Python
+  standard library only. Do not add third-party imports, even as optional
+  dependencies.
 
-### Naming
+### Naming conventions
 
-| Entity | Convention | Example |
-|--------|-----------|---------|
-| Module | `snake_case` | `pgn.py` |
-| Class | `PascalCase` | `MoveNode` |
-| Function / method | `snake_case` | `build_san()` |
-| Private helper | `_snake_case` | `_tokenize_pgn_body()` |
-| Constant | `UPPER_SNAKE` | `NAG_SYM` |
+| Entity            | Convention    | Example                  |
+|-------------------|---------------|--------------------------|
+| Module            | `snake_case`  | `pgn.py`                 |
+| Class             | `PascalCase`  | `MoveNode`               |
+| Function / method | `snake_case`  | `build_san()`            |
+| Private helper    | `_snake_case` | `_tokenize_pgn_body()`   |
+| Constant          | `UPPER_SNAKE` | `NAG_SYM`                |
 
 ### Type hints
 
 - All **public functions** must have complete type annotations.
-- Private helpers should have annotations where it aids readability.
-- Use `from __future__ import annotations` in files with forward references.
+- Private helpers should have annotations wherever they aid readability.
+- Use `from __future__ import annotations` in files that contain forward
+  references.
 
 ### Docstrings
 
-Public modules, classes, and functions must have a docstring.  
-Format (NumPy-style condensed):
+Public modules, classes, and functions must have a docstring.
+Use the condensed NumPy style:
 
 ```python
 def legal_moves(board: list, r: int, c: int) -> list[tuple[int, int]]:
@@ -259,8 +271,8 @@ def legal_moves(board: list, r: int, c: int) -> list[tuple[int, int]]:
 
 ### Import order (within each file)
 
-1. Standard library
-2. Blank line
+1. Standard library modules
+2. *(blank line)*
 3. Relative imports from the package (`from .module import …`)
 
 ---
@@ -270,68 +282,70 @@ def legal_moves(board: list, r: int, c: int) -> list[tuple[int, int]]:
 ### Running the suite
 
 ```bash
-# All tests, verbose
+# All tests, verbose output
 python -m pytest tests/ -v
 
-# Single test class
+# A single test class
 python -m pytest tests/test_taketaketake.py::TestArrocco -v
 
-# With coverage (requires pip install pytest-cov)
+# With a coverage report (requires pytest-cov)
 python -m pytest tests/ --cov=taketaketake --cov-report=term-missing
 ```
 
 ### Writing new tests
 
 - Place all tests in `tests/test_taketaketake.py`.
-- Every test class inherits from `unittest.TestCase`.
-- Test names must be descriptive: `test_castling_not_allowed_through_check`.
-- Use the `play_moves()` and `place()` helpers already defined in the file.
+- Every test class must inherit from `unittest.TestCase`.
+- Test method names must be descriptive:
+  `test_castling_not_allowed_through_check` rather than `test_castle`.
+- Use the `play_moves()` and `place()` helper functions already defined in
+  the file to set up board positions concisely.
 - **GUI code** (`app.py`) is excluded from the test requirement — tkinter
   cannot run headlessly without a display server.
 
-### Test categories
+### Test classes overview
 
-| Class | Covers |
-|-------|--------|
-| `TestUtilita` | Pure utility functions |
-| `TestPosizioneIniziale` | Starting board setup |
-| `TestMosseGrezze` | `raw_moves` for all piece types |
-| `TestScacco` | Check detection |
-| `TestMosseLegali` | Legal move filtering, pins, stalemate |
-| `TestApplyMove` | Board mutation, castling, promotion |
-| `TestArrocco` | All castling legality conditions |
-| `TestBuildSan` | SAN generation and disambiguation |
-| `TestSanToMove` | SAN parsing roundtrip |
-| `TestMoveNode` | Tree structure and navigation |
-| `TestParserPGN` | PGN parsing (headers, comments, NAG, variants) |
-| `TestTreeToPgn` | PGN serialisation and roundtrip |
-| `TestPartitiCelebri` | Integration: famous game openings and mates |
+| Class                  | What it covers                                              |
+|------------------------|-------------------------------------------------------------|
+| `TestUtilita`          | Pure utility functions (`sq`, `opponent`, `in_bounds`, …)  |
+| `TestPosizioneIniziale`| Correctness of the starting board layout                    |
+| `TestMosseGrezze`      | `raw_moves` output for every piece type                     |
+| `TestScacco`           | `is_in_check` and `find_king`                               |
+| `TestMosseLegali`      | Pins, check filtering, checkmate, stalemate                 |
+| `TestApplyMove`        | Board mutation, castling, pawn promotion, immutability      |
+| `TestArrocco`          | All castling legality conditions                            |
+| `TestBuildSan`         | SAN generation, disambiguation, check/mate suffixes         |
+| `TestSanToMove`        | Inverse SAN parsing and full roundtrip                      |
+| `TestMoveNode`         | Tree node structure, `depth()`, `main_line()`               |
+| `TestParserPGN`        | PGN parsing: headers, comments, NAG, nested variations      |
+| `TestTreeToPgn`        | PGN serialisation and parse→serialize roundtrip             |
+| `TestPartitiCelebri`   | Integration tests: Scholar's mate, Fool's mate, openings    |
 
 ---
 
 ## Project Structure
 
 ```
-taketaketake/               Python package (stdlib only)
-├── __init__.py             Public API + lazy GUI import
-├── __main__.py             CLI entry point (python -m taketaketake)
-├── constants.py            Colours, piece symbols, NAG definitions
-├── engine.py               Pure chess logic (moves, SAN, check…)
-├── tree.py                 MoveNode / GameTree data structures
-├── pgn.py                  PGN parser and serialiser
-└── app.py                  tkinter GUI (ChessApp)
+taketaketake/                    Python package (stdlib only)
+├── __init__.py                  Public API + lazy GUI import
+├── __main__.py                  CLI entry point: python -m taketaketake
+├── constants.py                 Colour palette, piece symbols, NAG map
+├── engine.py                    Pure chess logic (moves, SAN, check detection…)
+├── tree.py                      MoveNode / GameTree data structures
+├── pgn.py                       PGN parser and serialiser
+└── app.py                       tkinter GUI (ChessApp)
 
 tests/
-└── test_taketaketake.py    103 unit tests (stdlib unittest)
+└── test_taketaketake.py         103 unit tests across 13 classes (stdlib unittest)
 
 .github/
 └── workflows/
-    └── ci.yml              CI pipeline (lint → test → syntax → import → build)
+    └── ci.yml                   CI pipeline: lint → test matrix → syntax check
 
-pyproject.toml              Package metadata, pytest / coverage config
-README.md                   User-facing documentation
-CONTRIBUTING.md             This file
-CHANGELOG.md                Version history
+pyproject.toml                   Package metadata, pytest / coverage config
+README.md                        User-facing documentation
+CONTRIBUTING.md                  This file
+CHANGELOG.md                     Version history
 .gitignore
 ```
 
@@ -339,5 +353,5 @@ CHANGELOG.md                Version history
 
 ## Questions?
 
-Open a [GitHub Discussion](https://github.com/your-org/taketaketake/discussions)
-or tag a maintainer in an issue. We are happy to help!
+Open a [GitHub Discussion](https://github.com/bigmauri/taketaketake/discussions)
+or tag a maintainer in a relevant issue. We are happy to help!

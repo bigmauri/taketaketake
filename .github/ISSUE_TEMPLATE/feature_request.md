@@ -1,100 +1,70 @@
 ---
 name: Feature Request
-about: Propose a new feature or an improvement to an existing one
-title: "feat: <short description of the feature>"
-labels: ["enhancement", "needs-triage"]
-assignees: []
+about: Propose a new feature or improvement
+title: "[FEAT] <short description>"
+labels: enhancement
+assignees: ''
 ---
-
-<!--
-  Thank you for suggesting an improvement to TakeTakeTake!
-  Please fill in every relevant section below.
-  Incomplete proposals may be closed or deprioritised.
--->
 
 ## Summary
 
-<!--
-  One clear sentence describing the feature.
-  Focus on the *outcome*, not the implementation.
-
-  Good:  "Allow the user to export the current board position as a FEN string."
-  Avoid: "Add a to_fen() method to GameTree."
--->
+<!-- A clear and concise description of the feature you are proposing. -->
 
 
-## Motivation / Problem Statement
+## Motivation / Use Case
 
-<!--
-  Why is this feature needed?
-  Describe the concrete use case or pain point it addresses.
-  If this is related to an existing issue or discussion, link it here.
--->
+<!-- Why is this feature needed? Describe the problem or limitation you are
+     facing. Focus on the use case, not the implementation.
+
+     Example (good):
+       "When reviewing a game, I have no way to export the current board
+        position as a FEN string to paste into an external analysis tool."
+
+     Example (less useful):
+       "Add a to_fen() method." -->
 
 
 ## Proposed Solution
 
-<!--
-  Describe your preferred solution in as much detail as you have.
-  If you have a specific API in mind, show a usage example.
-  If you are unsure about the implementation, just describe the desired behaviour.
--->
+<!-- Describe the behaviour you would like to see. How should the feature
+     work from the user's perspective? Include UI details, keyboard shortcuts,
+     or API signatures if relevant. -->
 
-### Example usage (optional)
-
-```python
-# If the feature involves a public API, show how you'd like to use it.
-from taketaketake import ...
-
-```
 
 ## Alternatives Considered
 
-<!--
-  Have you considered any other approaches?
-  Why do you prefer the proposed solution over them?
--->
+<!-- Have you thought of other ways to achieve the same goal?
+     Why do you prefer the solution above? -->
 
 
-## Affected Module(s)
+## Scope & Constraints
 
-<!--
-  Which part(s) of the codebase would this feature touch?
-  Select all that apply and delete the rest.
--->
+<!-- TakeTakeTake is built with the Python standard library only (no external
+     dependencies). Please confirm your proposal fits within this constraint,
+     or explain why an exception would be justified. -->
 
-- [ ] `engine.py` — chess logic
-- [ ] `tree.py` — move tree / data structures
-- [ ] `pgn.py` — PGN parser / serialiser
-- [ ] `app.py` — GUI
-- [ ] `constants.py` — colours, symbols, NAG
-- [ ] `__main__.py` — CLI
-- [ ] `tests/` — test suite
-- [ ] `.github/` — CI / workflows
-- [ ] `docs/` — documentation only
+- [ ] This feature requires no external Python dependencies.
+- [ ] This feature is relevant to desktop chess viewing / editing / analysis.
 
-## Acceptance Criteria
 
-<!--
-  List the conditions that must be true for this feature to be considered done.
-  Written as testable statements where possible.
--->
+## Mockup / Example (if applicable)
 
-- [ ] 
-- [ ] 
-- [ ] 
+<!-- Paste a code snippet, ASCII sketch, or screenshot to illustrate what the
+     feature would look like in practice. -->
+
+```python
+# example API usage or pseudo-code
+```
+
 
 ## Additional Context
 
-<!--
-  Screenshots, mockups, links to similar implementations in other projects,
-  relevant PGN examples, or anything else that helps clarify the request.
--->
+<!-- Any other information, related issues, or links that might help us
+     evaluate this request. -->
 
 
 ## Checklist
 
-- [ ] I have searched the [existing issues](../../issues) and this is not a duplicate.
-- [ ] This feature does not require any external (non-stdlib) dependency.
-- [ ] I am willing to implement this feature myself and open a pull request.
-      *(Not required — feel free to leave unchecked if you are just proposing.)*
+- [ ] I have searched the [existing issues](https://github.com/bigmauri/taketaketake/issues) and [open pull requests](https://github.com/bigmauri/taketaketake/pulls) and this is not a duplicate.
+- [ ] This feature fits the project's scope (desktop chess viewer/editor, stdlib only).
+- [ ] I am willing to open a pull request to implement this feature.
