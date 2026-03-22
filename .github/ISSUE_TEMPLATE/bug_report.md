@@ -1,93 +1,89 @@
 ---
 name: Bug Report
-about: Report a reproducible defect in TakeTakeTake
-title: "fix: <short description of the bug>"
-labels: ["bug", "needs-triage"]
-assignees: []
+about: Report a reproducible problem so we can fix it
+title: "[BUG] <short description>"
+labels: bug
+assignees: ''
 ---
-
-<!--
-  Thank you for taking the time to report a bug!
-  Please fill in every section below. Issues with insufficient
-  information may be closed without investigation.
--->
 
 ## Summary
 
-<!-- One or two sentences describing what goes wrong. -->
+<!-- A clear and concise description of what the bug is. -->
 
 
 ## Environment
 
-| Field | Value |
-|-------|-------|
-| OS | <!-- e.g. Ubuntu 24.04 / Windows 11 / macOS 14 --> |
-| Python version | <!-- python --version --> |
-| TakeTakeTake version | <!-- check taketaketake/__init__.py or pip show taketaketake --> |
-| tkinter version | <!-- python -c "import tkinter; print(tkinter.TkVersion)" --> |
-| Installation method | <!-- pip install / editable (pip install -e .) / cloned directly --> |
+| Field          | Value                          |
+|----------------|--------------------------------|
+| OS             | e.g. Ubuntu 24.04 / Windows 11 |
+| Python version | e.g. 3.12.2                    |
+| tkinter version| e.g. 8.6 (`python -c "import tkinter; print(tkinter.TkVersion)"`) |
+| Install method | pip / run from source          |
+| Package version| e.g. 1.0.0 (`taketaketake --version`) |
+
 
 ## Steps to Reproduce
 
-<!--
-  List the exact steps needed to trigger the bug.
-  Be as specific as possible — include PGN snippets, move sequences,
-  or file paths where relevant.
--->
+<!-- Provide the exact sequence of actions that triggers the bug.
+     The more precise, the faster it can be fixed. -->
 
 1. 
 2. 
 3. 
 
+
 ## Expected Behaviour
 
-<!-- What should happen? -->
+<!-- What did you expect to happen? -->
 
 
 ## Actual Behaviour
 
-<!-- What actually happens? Include any error messages verbatim. -->
+<!-- What actually happened? Include any error messages shown in the UI. -->
 
 
 ## Traceback / Error Output
 
-<!--
-  Paste the full traceback here (if any).
-  Use a code block so it renders correctly.
--->
+<!-- If an exception was raised, paste the full traceback here.
+     Run `python -m taketaketake` from a terminal to capture console output. -->
 
 ```
 paste traceback here
 ```
 
-## PGN or Move Sequence (if applicable)
 
-<!--
-  If the bug is triggered by a specific game or position, paste the PGN
-  or the sequence of moves that reproduce it.
--->
+## PGN / Move Sequence (if applicable)
+
+<!-- If the bug is triggered by a specific game or position, paste the PGN
+     or the move sequence here. This is extremely helpful for reproduction. -->
 
 ```pgn
-[Event "Bug reproduction"]
+[Event "?"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
 [White "?"]
 [Black "?"]
 [Result "*"]
 
-* 
+*
 ```
+
 
 ## Screenshots (if applicable)
 
-<!-- Drag and drop images here, or delete this section if not needed. -->
+<!-- Drag and drop screenshots or screen recordings here if they help
+     illustrate the problem. -->
 
 
 ## Additional Context
 
-<!-- Any other information that might help — related issues, commit SHAs, etc. -->
+<!-- Any other information that might be relevant: display resolution,
+     multi-monitor setup, HiDPI / scaling settings, locale, etc. -->
 
 
 ## Checklist
 
-- [ ] I have searched the [existing issues](../../issues) and this is not a duplicate.
-- [ ] I can reproduce the bug on the latest commit of `develop`.
-- [ ] I have included all information requested above.
+- [ ] I have searched the [existing issues](https://github.com/bigmauri/taketaketake/issues) and this is not a duplicate.
+- [ ] I can reproduce this bug consistently with the steps above.
+- [ ] I have included the full traceback (if an exception was raised).

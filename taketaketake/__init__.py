@@ -27,7 +27,7 @@ Use as a library::
     from taketaketake import GameTree, MoveNode
 """
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 __author__  = "TakeTakeTake"
 __license__ = "MIT"
 

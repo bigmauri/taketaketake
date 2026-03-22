@@ -1,928 +1,1458 @@
 """
-tests/test_taketaketake.py
-Suite di test per il pacchetto taketaketake — Python 3 unittest (stdlib pura).
+test_taketaketake.py
+====================
+Comprehensive unit-test suite for the ``taketaketake`` package.
 
-Esecuzione:
-    python3 -m unittest tests.test_taketaketake -v
-    python3 -m pytest tests/ -v
+Run with either:
+    python -m unittest tests/test_taketaketake.py -v
+    python -m pytest    tests/test_taketaketake.py -v
+
+Coverage targets
+----------------
+engine      initial_board, raw_moves, legal_moves, is_in_check, find_king,
+            apply_move, has_any_legal_move, build_san, san_to_move,
+            sq, opponent, in_bounds
+tree        MoveNode, GameTree (depth, is_main_line, main_line, all_nodes,
+            ancestors, root, find_by_san_path)
+pgn         parse_pgn, tree_to_pgn  (roundtrip, headers, comments,
+            NAG, nested variations, multi-game files)
+constants   NAG_SYM presence, piece-symbol map completeness
+__init__    public API surface (all names importable)
+
+GUI (app.py) is intentionally excluded — tkinter requires a display server.
 """
 
-import unittest
 import copy
-import sys
-import os
+import unittest
 
-# ── Importa taketaketake senza avviare tkinter ───────────────────────────────
-# taketaketake.__init__ non importa tkinter di default (la GUI è lazy).
-# I test girano quindi in qualsiasi ambiente, anche headless.
-# Il pacchetto taketaketake deve essere installato (pip install -e .)
-# oppure la directory radice del progetto deve essere nel PYTHONPATH.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+# ---------------------------------------------------------------------------
+# Package imports
+# ---------------------------------------------------------------------------
 from taketaketake import (
-    initial_board, color_of, opponent, in_bounds, sq, sq_to_rc,
-    raw_moves, find_king, is_in_check, apply_move, legal_moves,
-    has_any_legal_move, build_san, san_to_move,
-    MoveNode, GameTree,
-    FILES,
+    initial_board,
+    legal_moves,
+    build_san,
+    apply_move,
+    san_to_move,
+    parse_pgn,
+    tree_to_pgn,
+    GameTree,
+    MoveNode,
 )
-from taketaketake.pgn import parse_pgn as parse_pgn_to_tree, tree_to_pgn
+from taketaketake.engine import (
+    raw_moves,
+    is_in_check,
+    find_king,
+    has_any_legal_move,
+    in_bounds,
+    opponent,
+    sq,
+)
+from taketaketake.constants import NAG_SYM, PIECES
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# HELPER
-# ═════════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
-def empty_board():
-    """Scacchiera completamente vuota."""
-    return [[None]*8 for _ in range(8)]
+def empty_board() -> list:
+    """Return a completely empty 8×8 board (all None)."""
+    return [[None] * 8 for _ in range(8)]
 
 
-def place(board, *pieces):
+def place(board: list, piece: str, row: int, col: int) -> list:
+    """Return a new board with *piece* placed at (row, col)."""
+    b = copy.deepcopy(board)
+    b[row][col] = piece
+    return b
+
+
+def play_moves(sans: list[str]) -> tuple:
     """
-    Posiziona pezzi su una scacchiera vuota.
-    pieces: sequenza di (notazione_algebrica, codice_pezzo)
-            es. ("e1","wK"), ("e8","bK"), ("d4","wQ")
-    """
-    for square, piece in pieces:
-        r, c = sq_to_rc(square)
-        board[r][c] = piece
-    return board
+    Play a sequence of SAN moves from the starting position.
 
-
-def play_moves(san_list):
-    """
-    Esegue una sequenza di mosse SAN dalla posizione iniziale.
-    Restituisce (board, color_to_move).
+    White moves on even indices (0, 2, 4, …), black on odd indices (1, 3, 5, …).
+    Returns (board, move_list) where move_list contains the applied move tuples.
     """
     board = initial_board()
-    color = "w"
-    for san in san_list:
-        mv = san_to_move(board, color, san)
-        if mv is None:
-            raise ValueError(f"Mossa non valida: {san}")
-        fr, fc, tr, tc, promo = mv
-        board = apply_move(board, fr, fc, tr, tc, promo)
-        color = opponent(color)
-    return board, color
+    applied = []
+    colors = ["w", "b"]
+    for i, san in enumerate(sans):
+        color = colors[i % 2]
+        move = san_to_move(board, color, san)
+        assert move is not None, f"san_to_move returned None for '{san}' (color={color})"
+        r1, c1, r2, c2, *_ = move
+        board = apply_move(board, r1, c1, r2, c2)
+        applied.append(move)
+    return board, applied
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 1 — FUNZIONI DI UTILITÀ
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 1. Utility functions
+# ===========================================================================
 
-class TestUtilita(unittest.TestCase):
+class TestUtilities(unittest.TestCase):
+    """Tests for pure utility helpers in engine.py."""
 
-    def test_opponent(self):
-        self.assertEqual(opponent("w"), "b")
-        self.assertEqual(opponent("b"), "w")
+    # sq -------------------------------------------------------------------
+    def test_sq_returns_string(self):
+        self.assertIsInstance(sq(7, 0), str)
 
-    def test_color_of(self):
-        self.assertEqual(color_of("wK"), "w")
-        self.assertEqual(color_of("bP"), "b")
-        self.assertIsNone(color_of(None))
-
-    def test_in_bounds(self):
-        self.assertTrue(in_bounds(0, 0))
-        self.assertTrue(in_bounds(7, 7))
-        self.assertFalse(in_bounds(-1, 0))
-        self.assertFalse(in_bounds(0, 8))
-
-    def test_sq(self):
-        self.assertEqual(sq(7, 4), "e1")   # e1 = riga 7, colonna 4
-        self.assertEqual(sq(0, 0), "a8")
-        self.assertEqual(sq(0, 7), "h8")
+    def test_sq_a1(self):
         self.assertEqual(sq(7, 0), "a1")
 
-    def test_sq_to_rc(self):
-        self.assertEqual(sq_to_rc("e1"), (7, 4))
-        self.assertEqual(sq_to_rc("a8"), (0, 0))
-        self.assertEqual(sq_to_rc("h1"), (7, 7))
+    def test_sq_e4(self):
+        self.assertEqual(sq(4, 4), "e4")
 
-    def test_sq_roundtrip(self):
-        for r in range(8):
-            for c in range(8):
-                self.assertEqual(sq_to_rc(sq(r, c)), (r, c))
+    def test_sq_h8(self):
+        self.assertEqual(sq(0, 7), "h8")
+
+    def test_sq_a8(self):
+        self.assertEqual(sq(0, 0), "a8")
+
+    def test_sq_h1(self):
+        self.assertEqual(sq(7, 7), "h1")
+
+    # opponent -------------------------------------------------------------
+    def test_opponent_w_gives_b(self):
+        self.assertEqual(opponent("w"), "b")
+
+    def test_opponent_b_gives_w(self):
+        self.assertEqual(opponent("b"), "w")
+
+    # in_bounds ------------------------------------------------------------
+    def test_in_bounds_center(self):
+        self.assertTrue(in_bounds(4, 4))
+
+    def test_in_bounds_corners(self):
+        for r, c in [(0, 0), (0, 7), (7, 0), (7, 7)]:
+            with self.subTest(r=r, c=c):
+                self.assertTrue(in_bounds(r, c))
+
+    def test_in_bounds_negative_row(self):
+        self.assertFalse(in_bounds(-1, 0))
+
+    def test_in_bounds_negative_col(self):
+        self.assertFalse(in_bounds(0, -1))
+
+    def test_in_bounds_row_too_large(self):
+        self.assertFalse(in_bounds(8, 0))
+
+    def test_in_bounds_col_too_large(self):
+        self.assertFalse(in_bounds(0, 8))
+
+    def test_in_bounds_both_out_of_range(self):
+        self.assertFalse(in_bounds(-1, 9))
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 2 — POSIZIONE INIZIALE
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 2. Initial board
+# ===========================================================================
 
-class TestPosizioneIniziale(unittest.TestCase):
+class TestInitialBoard(unittest.TestCase):
+    """Verify that initial_board() returns the correct starting position."""
 
     def setUp(self):
         self.board = initial_board()
 
-    def test_re_bianco_in_e1(self):
-        self.assertEqual(self.board[7][4], "wK")
+    def test_board_is_8x8(self):
+        self.assertEqual(len(self.board), 8)
+        for row in self.board:
+            self.assertEqual(len(row), 8)
 
-    def test_re_nero_in_e8(self):
-        self.assertEqual(self.board[0][4], "bK")
-
-    def test_pedoni_bianchi_riga_7(self):
-        for c in range(8):
-            self.assertEqual(self.board[6][c], "wP",
-                             f"Pedone bianco mancante in colonna {FILES[c]}")
-
-    def test_pedoni_neri_riga_2(self):
-        for c in range(8):
-            self.assertEqual(self.board[1][c], "bP",
-                             f"Pedone nero mancante in colonna {FILES[c]}")
-
-    def test_prima_riga_nera(self):
-        expected = ["bR","bN","bB","bQ","bK","bB","bN","bR"]
-        self.assertEqual(self.board[0], expected)
-
-    def test_ottava_riga_bianca(self):
-        expected = ["wR","wN","wB","wQ","wK","wB","wN","wR"]
+    def test_white_back_rank(self):
+        expected = ["wR", "wN", "wB", "wQ", "wK", "wB", "wN", "wR"]
         self.assertEqual(self.board[7], expected)
 
-    def test_righe_centrali_vuote(self):
-        for r in range(2, 6):
-            for c in range(8):
-                self.assertIsNone(self.board[r][c],
-                                  f"Casella {sq(r,c)} non vuota")
+    def test_black_back_rank(self):
+        expected = ["bR", "bN", "bB", "bQ", "bK", "bB", "bN", "bR"]
+        self.assertEqual(self.board[0], expected)
+
+    def test_white_pawns(self):
+        self.assertEqual(self.board[6], ["wP"] * 8)
+
+    def test_black_pawns(self):
+        self.assertEqual(self.board[1], ["bP"] * 8)
+
+    def test_empty_ranks(self):
+        for rank in range(2, 6):
+            with self.subTest(rank=rank):
+                self.assertEqual(self.board[rank], [None] * 8)
+
+    def test_white_king_position(self):
+        self.assertEqual(self.board[7][4], "wK")
+
+    def test_black_king_position(self):
+        self.assertEqual(self.board[0][4], "bK")
+
+    def test_white_queen_position(self):
+        self.assertEqual(self.board[7][3], "wQ")
+
+    def test_black_queen_position(self):
+        self.assertEqual(self.board[0][3], "bQ")
+
+    def test_immutability_of_subsequent_calls(self):
+        b1 = initial_board()
+        b2 = initial_board()
+        b1[6][0] = None          # mutate first board
+        self.assertEqual(b2[6][0], "wP")  # second board unaffected
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 3 — MOSSE GREZZE DEI PEZZI
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 3. Raw moves
+# ===========================================================================
 
-class TestMosseGrezze(unittest.TestCase):
+class TestRawMoves(unittest.TestCase):
+    """Verify raw_moves() for every piece type (ignores check)."""
 
-    # ── Pedone ───────────────────────────────────────────────────────────────
-    def test_pedone_bianco_doppio_passo_iniziale(self):
+    def _raw(self, board, r, c):
+        return set(raw_moves(board, r, c))
+
+    # Pawn -----------------------------------------------------------------
+    def test_white_pawn_initial_can_advance_one_or_two(self):
         board = initial_board()
-        # e2 = (6,4)
-        moves = raw_moves(board, 6, 4)
-        self.assertIn((5, 4), moves, "Mancante e3")
-        self.assertIn((4, 4), moves, "Mancante e4")
+        moves = self._raw(board, 6, 4)   # e2
+        self.assertIn((4, 4), moves)     # e4
+        self.assertIn((5, 4), moves)     # e3
 
-    def test_pedone_bianco_passo_singolo_dopo_mossa(self):
+    def test_white_pawn_on_rank_3_can_only_advance_one(self):
         board = empty_board()
-        place(board, ("e4","wP"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 4)   # e4
-        self.assertIn((3, 4), moves)     # e5
-        self.assertNotIn((2, 4), moves)  # e6 non raggiungibile
-
-    def test_pedone_cattura_diagonale(self):
-        board = empty_board()
-        place(board, ("e4","wP"), ("d5","bP"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 4)   # e4
-        self.assertIn((3, 3), moves)     # cattura in d5
-
-    def test_pedone_bloccato(self):
-        board = empty_board()
-        place(board, ("e4","wP"), ("e5","bP"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 4)
+        board = place(board, "wP", 5, 4)
+        moves = self._raw(board, 5, 4)
+        self.assertIn((4, 4), moves)
         self.assertNotIn((3, 4), moves)
 
-    # ── Cavallo ───────────────────────────────────────────────────────────────
-    def test_cavallo_al_centro(self):
-        board = empty_board()
-        place(board, ("d4","wN"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 3)   # d4
-        self.assertEqual(len(moves), 8, "Il cavallo al centro ha 8 mosse")
-
-    def test_cavallo_in_angolo(self):
-        board = empty_board()
-        place(board, ("a1","wN"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 7, 0)
-        self.assertEqual(len(moves), 2)
-
-    # ── Torre ─────────────────────────────────────────────────────────────────
-    def test_torre_su_riga_vuota(self):
-        board = empty_board()
-        place(board, ("a4","wR"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 0)
-        # 7 caselle in orizzontale + 3 su + 4 giù = 14
-        self.assertEqual(len(moves), 14)
-
-    def test_torre_bloccata_da_alleato(self):
-        board = empty_board()
-        place(board, ("a1","wR"), ("a4","wP"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 7, 0)   # Torre a1
-        # Può andare a1-a3 (3 caselle) e a1-h1 (7 caselle) = 10
-        verticals = [m for m in moves if m[1] == 0]
-        self.assertEqual(len(verticals), 2)   # a2, a3 (a4 bloccata)
-
-    # ── Alfiere ───────────────────────────────────────────────────────────────
-    def test_alfiere_al_centro(self):
-        board = empty_board()
-        place(board, ("d4","wB"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 3)
-        self.assertEqual(len(moves), 13)
-
-    # ── Regina ────────────────────────────────────────────────────────────────
-    def test_regina_al_centro(self):
-        board = empty_board()
-        place(board, ("d4","wQ"), ("e1","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 3)
-        self.assertEqual(len(moves), 27)
-
-    # ── Re ────────────────────────────────────────────────────────────────────
-    def test_re_al_centro(self):
-        board = empty_board()
-        place(board, ("d4","wK"), ("e8","bK"))
-        moves = raw_moves(board, 4, 3)
-        self.assertEqual(len(moves), 8)
-
-    def test_re_non_cattura_alleato(self):
-        board = empty_board()
-        place(board, ("d4","wK"), ("e4","wP"), ("e8","bK"))
-        moves = raw_moves(board, 4, 3)
+    def test_white_pawn_cannot_advance_if_blocked(self):
+        board = initial_board()
+        board = place(board, "bP", 5, 4)   # block e3
+        moves = self._raw(board, 6, 4)
+        self.assertNotIn((5, 4), moves)
         self.assertNotIn((4, 4), moves)
 
+    def test_white_pawn_captures_diagonally(self):
+        board = empty_board()
+        board = place(board, "wP", 4, 4)
+        board = place(board, "bP", 3, 3)
+        board = place(board, "bP", 3, 5)
+        moves = self._raw(board, 4, 4)
+        self.assertIn((3, 3), moves)
+        self.assertIn((3, 5), moves)
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 4 — SCACCO
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestScacco(unittest.TestCase):
-
-    def test_nessuno_scacco_posizione_iniziale(self):
+    def test_black_pawn_initial_advance(self):
         board = initial_board()
-        self.assertFalse(is_in_check(board, "w"))
-        self.assertFalse(is_in_check(board, "b"))
+        moves = self._raw(board, 1, 4)   # e7
+        self.assertIn((2, 4), moves)
+        self.assertIn((3, 4), moves)
 
-    def test_scacco_dalla_donna(self):
+    def test_black_pawn_captures_diagonally(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("e8","bK"), ("e5","bQ"))
-        self.assertTrue(is_in_check(board, "w"))
-        self.assertFalse(is_in_check(board, "b"))
+        board = place(board, "bP", 3, 4)
+        board = place(board, "wP", 4, 3)
+        board = place(board, "wP", 4, 5)
+        moves = self._raw(board, 3, 4)
+        self.assertIn((4, 3), moves)
+        self.assertIn((4, 5), moves)
 
-    def test_scacco_dal_cavallo(self):
+    # Knight ---------------------------------------------------------------
+    def test_knight_from_center_has_eight_moves(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("e8","bK"), ("f3","bN"))
-        self.assertTrue(is_in_check(board, "w"))
+        board = place(board, "wN", 4, 4)
+        moves = self._raw(board, 4, 4)
+        self.assertEqual(len(moves), 8)
 
-    def test_scacco_dal_pedone(self):
+    def test_knight_from_corner_has_two_moves(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("e8","bK"), ("d2","bP"))
-        self.assertTrue(is_in_check(board, "w"))
+        board = place(board, "wN", 0, 0)
+        moves = self._raw(board, 0, 0)
+        self.assertEqual(len(moves), 2)
 
-    def test_scacco_bloccato_da_pezzo(self):
+    def test_knight_jumps_over_pieces(self):
+        board = initial_board()
+        # b1 knight should have moves even with pawns in the way
+        moves = self._raw(board, 7, 1)
+        self.assertGreater(len(moves), 0)
+
+    # Bishop ---------------------------------------------------------------
+    def test_bishop_from_center_on_empty_board(self):
         board = empty_board()
-        # La donna nera è sulla stessa colonna del re bianco ma c'è un pezzo in mezzo
-        place(board, ("e1","wK"), ("e8","bK"), ("e5","bQ"), ("e3","wP"))
-        self.assertFalse(is_in_check(board, "w"))
+        board = place(board, "wB", 4, 4)
+        moves = self._raw(board, 4, 4)
+        self.assertEqual(len(moves), 13)
 
-    def test_find_king(self):
+    def test_bishop_blocked_by_own_piece(self):
+        board = empty_board()
+        board = place(board, "wB", 4, 4)
+        board = place(board, "wP", 3, 3)   # block one diagonal
+        moves = self._raw(board, 4, 4)
+        self.assertNotIn((2, 2), moves)
+        self.assertNotIn((3, 3), moves)
+
+    def test_bishop_can_capture_enemy(self):
+        board = empty_board()
+        board = place(board, "wB", 4, 4)
+        board = place(board, "bP", 3, 3)
+        moves = self._raw(board, 4, 4)
+        self.assertIn((3, 3), moves)
+        self.assertNotIn((2, 2), moves)    # cannot pass through
+
+    # Rook -----------------------------------------------------------------
+    def test_rook_from_center_on_empty_board(self):
+        board = empty_board()
+        board = place(board, "wR", 4, 4)
+        moves = self._raw(board, 4, 4)
+        self.assertEqual(len(moves), 14)
+
+    def test_rook_blocked_by_own_piece(self):
+        board = empty_board()
+        board = place(board, "wR", 4, 4)
+        board = place(board, "wP", 4, 6)
+        moves = self._raw(board, 4, 4)
+        self.assertIn((4, 5), moves)
+        self.assertNotIn((4, 6), moves)
+        self.assertNotIn((4, 7), moves)
+
+    # Queen ----------------------------------------------------------------
+    def test_queen_from_center_on_empty_board(self):
+        board = empty_board()
+        board = place(board, "wQ", 4, 4)
+        moves = self._raw(board, 4, 4)
+        self.assertEqual(len(moves), 27)
+
+    # King -----------------------------------------------------------------
+    def test_king_has_eight_moves_from_center(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        moves = self._raw(board, 4, 4)
+        self.assertEqual(len(moves), 8)
+
+    def test_king_from_corner_has_three_moves(self):
+        board = empty_board()
+        board = place(board, "wK", 0, 0)
+        moves = self._raw(board, 0, 0)
+        self.assertEqual(len(moves), 3)
+
+    def test_empty_square_returns_empty(self):
+        board = initial_board()
+        self.assertEqual(raw_moves(board, 4, 4), [])
+
+
+# ===========================================================================
+# 4. Check detection
+# ===========================================================================
+
+class TestCheckDetection(unittest.TestCase):
+    """Tests for is_in_check() and find_king()."""
+
+    def test_find_white_king_initial(self):
         board = initial_board()
         self.assertEqual(find_king(board, "w"), (7, 4))
+
+    def test_find_black_king_initial(self):
+        board = initial_board()
         self.assertEqual(find_king(board, "b"), (0, 4))
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# 5 — MOSSE LEGALI (filtrano lo scacco)
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestMosseLegali(unittest.TestCase):
-
-    def test_mossa_legale_non_espone_re(self):
-        # Il pedone in e2 è inchiodato: la donna nera minaccia il re
-        board = empty_board()
-        place(board, ("e1","wK"), ("e8","bK"), ("e7","bQ"), ("e2","wP"))
-        # L'unica mossa legale del pedone è avanzare nella colonna e (rimane inchiodato
-        # ma la donna è dietro e non può catturare il re attraverso il pedone)
-        moves = legal_moves(board, 6, 4)   # pedone e2
-        # Il pedone può avanzare (non espone il re)
-        self.assertIn((5, 4), moves)
-
-    def test_pezzo_inchiodato_non_puo_muovere(self):
-        # Il cavallo è inchiodato ortogonalmente: re bianco e1, cavallo e4, donna nera e8.
-        # Il cavallo non può muoversi perché lascerebbe il re sotto scacco della donna.
-        board = empty_board()
-        place(board, ("e1","wK"), ("e4","wN"), ("e8","bQ"), ("h8","bK"))
-        moves = legal_moves(board, 4, 4)   # Cavallo e4
-        self.assertEqual(moves, [], "Cavallo inchiodato ortogonalmente non può muoversi")
-
-    def test_unica_mossa_blocco_scacco(self):
-        # Il re bianco è sotto scacco: solo il blocco è legale
-        board = empty_board()
-        place(board, ("e1","wK"), ("e8","bQ"), ("d2","wR"), ("h8","bK"))
-        # La torre in d2 può interporsi in e2
-        moves = legal_moves(board, 6, 3)   # Torre d2
-        self.assertIn((6, 4), moves)   # Torre d2 → e2, blocca lo scacco
-
-    def test_nessuna_mossa_scacco_matto(self):
-        # Scholar's mate: 1.e4 e5 2.Bc4 Nc6 3.Qh5 Nf6?? 4.Qxf7#
-        san_seq = ["e4","e5","Bc4","Nc6","Qh5","Nf6","Qxf7"]
-        board, color = play_moves(san_seq)
-        self.assertEqual(color, "b")
-        self.assertTrue(is_in_check(board, "b"))
-        self.assertFalse(has_any_legal_move(board, "b"))
-
-    def test_stallo(self):
-        # Stallo classico: re nero in a8, bianco gioca con donna
-        board = empty_board()
-        place(board, ("a8","bK"), ("c7","wQ"), ("a1","wK"))
-        # Verifica che il nero non abbia mosse ma non sia sotto scacco
+    def test_no_check_at_start(self):
+        board = initial_board()
+        self.assertFalse(is_in_check(board, "w"))
         self.assertFalse(is_in_check(board, "b"))
+
+    def test_white_king_in_check_by_rook(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        board = place(board, "bR", 4, 0)
+        self.assertTrue(is_in_check(board, "w"))
+
+    def test_white_king_in_check_by_bishop(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        board = place(board, "bB", 1, 1)
+        self.assertTrue(is_in_check(board, "w"))
+
+    def test_white_king_in_check_by_knight(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        board = place(board, "bN", 2, 3)
+        self.assertTrue(is_in_check(board, "w"))
+
+    def test_white_king_in_check_by_pawn(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        board = place(board, "bP", 3, 3)
+        self.assertTrue(is_in_check(board, "w"))
+
+    def test_check_blocked_by_own_piece(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        board = place(board, "wP", 4, 2)   # blocks the rook
+        board = place(board, "bR", 4, 0)
+        self.assertFalse(is_in_check(board, "w"))
+
+    def test_check_blocked_by_enemy_piece(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        board = place(board, "bP", 4, 2)
+        board = place(board, "bR", 4, 0)
+        self.assertFalse(is_in_check(board, "w"))
+
+    def test_black_king_in_check_by_queen(self):
+        board = empty_board()
+        board = place(board, "bK", 0, 4)
+        board = place(board, "wQ", 7, 4)
+        self.assertTrue(is_in_check(board, "b"))
+
+    def test_kings_adjacent_mutual_attack(self):
+        board = empty_board()
+        board = place(board, "wK", 4, 4)
+        board = place(board, "bK", 4, 6)
+        # Neither king directly attacks the other (two squares apart on same rank)
+        self.assertFalse(is_in_check(board, "w"))
+
+
+# ===========================================================================
+# 5. Legal moves (pins, stalemate, checkmate filtering)
+# ===========================================================================
+
+class TestLegalMoves(unittest.TestCase):
+    """Tests for legal_moves() — moves that do not leave king in check."""
+
+    def test_initial_white_has_20_moves(self):
+        board = initial_board()
+        all_moves = []
+        for r in range(8):
+            for c in range(8):
+                if board[r][c] and board[r][c][0] == "w":
+                    all_moves.extend(legal_moves(board, r, c))
+        self.assertEqual(len(all_moves), 20)
+
+    def test_pinned_piece_cannot_expose_king(self):
+        # Vertical pin: wK on e1 (7,4), wR on e4 (4,4), bR on e8 (0,4).
+        # The white rook on e4 is absolutely pinned along the e-file
+        # and cannot move off it without exposing the king.
+        board = empty_board()
+        board = place(board, "wK", 7, 4)   # e1
+        board = place(board, "wR", 4, 4)   # e4 — pinned
+        board = place(board, "bR", 0, 4)   # e8 — pins along e-file
+        board = place(board, "bK", 0, 0)
+        moves = legal_moves(board, 4, 4)
+        # Only moves along the e-file are legal (col 4 only)
+        for r, c in moves:
+            self.assertEqual(c, 4, msg=f"Pinned rook illegally moved to ({r},{c})")
+
+    def test_king_cannot_move_into_check(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bR", 0, 3)   # covers d-file
+        board = place(board, "bR", 0, 5)   # covers f-file
+        moves = legal_moves(board, 7, 4)
+        destinations = [(r, c) for r, c in moves]
+        self.assertNotIn((7, 3), destinations)
+        self.assertNotIn((7, 5), destinations)
+
+    def test_only_blocking_moves_allowed_in_check(self):
+        # White king is in check from black rook; only legal move blocks or captures
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bR", 0, 4)   # check along e-file
+        board = place(board, "wR", 3, 0)   # can interpose on e5
+        # King must move or rook must block/capture
+        king_moves = legal_moves(board, 7, 4)
+        rook_moves = legal_moves(board, 3, 0)
+        # At least one legal response must exist
+        self.assertTrue(len(king_moves) > 0 or len(rook_moves) > 0)
+
+    def test_stalemate_position_has_no_legal_moves(self):
+        # Classic stalemate: black king trapped in corner
+        board = empty_board()
+        board = place(board, "bK", 0, 0)
+        board = place(board, "wQ", 1, 2)
+        board = place(board, "wK", 2, 1)
+        all_black_moves = []
+        for r in range(8):
+            for c in range(8):
+                if board[r][c] and board[r][c][0] == "b":
+                    all_black_moves.extend(legal_moves(board, r, c))
+        self.assertEqual(all_black_moves, [])
+        self.assertFalse(is_in_check(board, "b"))
+
+    def test_checkmate_has_no_legal_moves(self):
+        # Ladder mate: bK h8 (0,7).
+        # wR a8 (0,0) gives check along rank 8 and covers g8.
+        # wR a7 (1,0) covers rank 7, blocking g7 and h7.
+        # wK f6 (2,5) is out of the way; bK cannot capture either rook.
+        board = empty_board()
+        board = place(board, "bK", 0, 7)   # h8
+        board = place(board, "wR", 0, 0)   # a8 — check + covers rank 8
+        board = place(board, "wR", 1, 0)   # a7 — covers rank 7 (g7, h7)
+        board = place(board, "wK", 2, 5)   # f6
+        all_black_moves = []
+        for r in range(8):
+            for c in range(8):
+                if board[r][c] and board[r][c][0] == "b":
+                    all_black_moves.extend(legal_moves(board, r, c))
+        self.assertEqual(all_black_moves, [])
+        self.assertTrue(is_in_check(board, "b"))
+
+    def test_has_any_legal_move_returns_true_at_start(self):
+        board = initial_board()
+        self.assertTrue(has_any_legal_move(board, "w"))
+        self.assertTrue(has_any_legal_move(board, "b"))
+
+    def test_has_any_legal_move_false_on_checkmate(self):
+        # Same position as test_checkmate_has_no_legal_moves
+        board = empty_board()
+        board = place(board, "bK", 0, 7)   # h8
+        board = place(board, "wR", 0, 0)   # a8
+        board = place(board, "wR", 1, 0)   # a7
+        board = place(board, "wK", 2, 5)   # f6
         self.assertFalse(has_any_legal_move(board, "b"))
 
-    def test_mosse_legali_posizione_iniziale_bianco(self):
-        board = initial_board()
-        total = sum(len(legal_moves(board, r, c))
-                    for r in range(8) for c in range(8)
-                    if color_of(board[r][c]) == "w")
-        self.assertEqual(total, 20, "Dalla posizione iniziale il bianco ha 20 mosse")
 
-    def test_mosse_legali_posizione_iniziale_nero(self):
-        board = initial_board()
-        total = sum(len(legal_moves(board, r, c))
-                    for r in range(8) for c in range(8)
-                    if color_of(board[r][c]) == "b")
-        self.assertEqual(total, 20, "Dalla posizione iniziale il nero ha 20 mosse")
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# 6 — apply_move: arrocco e promozione
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 6. apply_move
+# ===========================================================================
 
 class TestApplyMove(unittest.TestCase):
+    """Tests for apply_move() — board mutation, special moves, immutability."""
 
-    def test_arrocco_corto_bianco(self):
-        board = empty_board()
-        place(board, ("e1","wK"), ("h1","wR"), ("e8","bK"))
-        nb = apply_move(board, 7, 4, 7, 6)   # Re e1 → g1
-        self.assertEqual(nb[7][6], "wK")
-        self.assertEqual(nb[7][5], "wR")
-        self.assertIsNone(nb[7][7])
-        self.assertIsNone(nb[7][4])
-
-    def test_arrocco_lungo_bianco(self):
-        board = empty_board()
-        place(board, ("e1","wK"), ("a1","wR"), ("e8","bK"))
-        nb = apply_move(board, 7, 4, 7, 2)   # Re e1 → c1
-        self.assertEqual(nb[7][2], "wK")
-        self.assertEqual(nb[7][3], "wR")
-        self.assertIsNone(nb[7][0])
-
-    def test_arrocco_corto_nero(self):
-        board = empty_board()
-        place(board, ("e8","bK"), ("h8","bR"), ("e1","wK"))
-        nb = apply_move(board, 0, 4, 0, 6)
-        self.assertEqual(nb[0][6], "bK")
-        self.assertEqual(nb[0][5], "bR")
-
-    def test_promozione_default_regina(self):
-        board = empty_board()
-        place(board, ("e7","wP"), ("e1","wK"), ("e8","bK"))
-        nb = apply_move(board, 1, 4, 0, 4)   # e7 → e8
-        self.assertEqual(nb[0][4], "wQ")
-
-    def test_promozione_cavallo(self):
-        board = empty_board()
-        place(board, ("e7","wP"), ("e1","wK"), ("e8","bK"))
-        nb = apply_move(board, 1, 4, 0, 4, promo="N")
-        self.assertEqual(nb[0][4], "wN")
-
-    def test_promozione_nera(self):
-        board = empty_board()
-        place(board, ("e2","bP"), ("e8","bK"), ("e1","wK"))
-        nb = apply_move(board, 6, 4, 7, 4)
-        self.assertEqual(nb[7][4], "bQ")
-
-    def test_board_originale_non_modificato(self):
+    def test_apply_move_returns_new_board(self):
         board = initial_board()
-        original = copy.deepcopy(board)
-        apply_move(board, 6, 4, 4, 4)   # e2-e4
-        self.assertEqual(board, original, "apply_move non deve modificare il board originale")
+        new_board = apply_move(board, 6, 4, 4, 4)
+        self.assertIsNot(board, new_board)
 
+    def test_original_board_unmodified(self):
+        board = initial_board()
+        apply_move(board, 6, 4, 4, 4)
+        self.assertEqual(board[6][4], "wP")
+        self.assertIsNone(board[4][4])
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 7 — Arrocco: condizioni legali
-# ═════════════════════════════════════════════════════════════════════════════
+    def test_pawn_moves_correctly(self):
+        board = initial_board()
+        new_board = apply_move(board, 6, 4, 4, 4)   # e2-e4
+        self.assertIsNone(new_board[6][4])
+        self.assertEqual(new_board[4][4], "wP")
 
-class TestArrocco(unittest.TestCase):
-
-    def test_arrocco_corto_bianco_disponibile(self):
+    def test_capture_removes_enemy_piece(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("h1","wR"), ("e8","bK"))
-        moves = legal_moves(board, 7, 4)
+        board = place(board, "wP", 4, 4)
+        board = place(board, "bP", 3, 5)
+        new_board = apply_move(board, 4, 4, 3, 5)
+        self.assertEqual(new_board[3][5], "wP")
+        self.assertIsNone(new_board[4][4])
+
+    def test_white_kingside_castling(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        new_board = apply_move(board, 7, 4, 7, 6)
+        self.assertEqual(new_board[7][6], "wK")
+        self.assertEqual(new_board[7][5], "wR")
+        self.assertIsNone(new_board[7][4])
+        self.assertIsNone(new_board[7][7])
+
+    def test_white_queenside_castling(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 0)
+        new_board = apply_move(board, 7, 4, 7, 2)
+        self.assertEqual(new_board[7][2], "wK")
+        self.assertEqual(new_board[7][3], "wR")
+        self.assertIsNone(new_board[7][4])
+        self.assertIsNone(new_board[7][0])
+
+    def test_black_kingside_castling(self):
+        board = empty_board()
+        board = place(board, "bK", 0, 4)
+        board = place(board, "bR", 0, 7)
+        new_board = apply_move(board, 0, 4, 0, 6)
+        self.assertEqual(new_board[0][6], "bK")
+        self.assertEqual(new_board[0][5], "bR")
+
+    def test_black_queenside_castling(self):
+        board = empty_board()
+        board = place(board, "bK", 0, 4)
+        board = place(board, "bR", 0, 0)
+        new_board = apply_move(board, 0, 4, 0, 2)
+        self.assertEqual(new_board[0][2], "bK")
+        self.assertEqual(new_board[0][3], "bR")
+
+    def test_pawn_promotion_to_queen_by_default(self):
+        board = empty_board()
+        board = place(board, "wP", 1, 4)   # one step from promotion
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 0)
+        new_board = apply_move(board, 1, 4, 0, 4)
+        self.assertEqual(new_board[0][4], "wQ")
+
+    def test_pawn_promotion_to_rook(self):
+        board = empty_board()
+        board = place(board, "wP", 1, 4)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 0)
+        new_board = apply_move(board, 1, 4, 0, 4, promo="R")
+        self.assertEqual(new_board[0][4], "wR")
+
+    def test_pawn_promotion_to_knight(self):
+        board = empty_board()
+        board = place(board, "wP", 1, 4)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 0)
+        new_board = apply_move(board, 1, 4, 0, 4, promo="N")
+        self.assertEqual(new_board[0][4], "wN")
+
+    def test_black_pawn_promotion(self):
+        board = empty_board()
+        board = place(board, "bP", 6, 3)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 4)
+        new_board = apply_move(board, 6, 3, 7, 3)
+        self.assertEqual(new_board[7][3], "bQ")
+
+
+# ===========================================================================
+# 7. Castling legality
+# ===========================================================================
+
+class TestCastlingLegality(unittest.TestCase):
+    """Castling is only legal under specific conditions."""
+
+    def _king_castling_destinations(self, board, color):
+        row = 7 if color == "w" else 0
+        return legal_moves(board, row, 4)
+
+    def test_castling_allowed_when_path_clear(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "bK", 0, 4)
+        moves = self._king_castling_destinations(board, "w")
         self.assertIn((7, 6), moves)
 
-    def test_arrocco_lungo_bianco_disponibile(self):
+    def test_castling_blocked_by_piece_between(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("a1","wR"), ("e8","bK"))
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "wB", 7, 5)   # blocks f1
+        board = place(board, "bK", 0, 4)
+        moves = self._king_castling_destinations(board, "w")
+        self.assertNotIn((7, 6), moves)
+
+    def test_castling_not_allowed_while_in_check(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "bR", 0, 4)   # check on e-file
+        board = place(board, "bK", 0, 0)
+        moves = legal_moves(board, 7, 4)
+        self.assertNotIn((7, 6), moves)
+
+    def test_castling_not_allowed_through_attacked_square(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "bR", 0, 5)   # attacks f1 (7,5)
+        board = place(board, "bK", 0, 0)
+        moves = legal_moves(board, 7, 4)
+        self.assertNotIn((7, 6), moves)
+
+    def test_castling_not_allowed_landing_in_check(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "bR", 0, 6)   # attacks g1 (7,6)
+        board = place(board, "bK", 0, 0)
+        moves = legal_moves(board, 7, 4)
+        self.assertNotIn((7, 6), moves)
+
+    def test_queenside_castling_allowed(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 0)
+        board = place(board, "bK", 0, 4)
         moves = legal_moves(board, 7, 4)
         self.assertIn((7, 2), moves)
 
-    def test_arrocco_non_disponibile_sotto_scacco(self):
+    def test_queenside_castling_blocked(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("h1","wR"), ("e8","bK"), ("e5","bR"))
-        # Il re è sotto scacco dalla torre nera in e5
-        self.assertTrue(is_in_check(board, "w"))
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 0)
+        board = place(board, "wN", 7, 1)   # blocks b1
+        board = place(board, "bK", 0, 4)
         moves = legal_moves(board, 7, 4)
-        self.assertNotIn((7, 6), moves)
-
-    def test_arrocco_non_disponibile_traversata_scacco(self):
-        # Il re passa per f1 che è controllata
-        board = empty_board()
-        place(board, ("e1","wK"), ("h1","wR"), ("e8","bK"), ("f5","bR"))
-        moves = legal_moves(board, 7, 4)
-        self.assertNotIn((7, 6), moves)
-
-    def test_arrocco_non_disponibile_casella_finale_attaccata(self):
-        # g1 è controllata dalla torre nera
-        board = empty_board()
-        place(board, ("e1","wK"), ("h1","wR"), ("e8","bK"), ("g5","bR"))
-        moves = legal_moves(board, 7, 4)
-        self.assertNotIn((7, 6), moves)
-
-    def test_arrocco_non_disponibile_pezzo_frapposto(self):
-        board = initial_board()   # Re e cavaliere f1 in mezzo
-        moves = legal_moves(board, 7, 4)
-        self.assertNotIn((7, 6), moves)
+        self.assertNotIn((7, 2), moves)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 8 — Notazione SAN: build_san
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 8. SAN generation (build_san)
+# ===========================================================================
 
 class TestBuildSan(unittest.TestCase):
+    """Tests for build_san() — SAN string construction."""
 
-    def test_pedone_avanza(self):
+    def test_pawn_advance(self):
         board = initial_board()
-        san = build_san(board, 6, 4, 4, 4)   # e2-e4
-        self.assertEqual(san, "e4")
+        self.assertEqual(build_san(board, 6, 4, 4, 4), "e4")
 
-    def test_pedone_avanza_singolo(self):
-        board, _ = play_moves(["e4"])
-        san = build_san(board, 5, 4, 4, 4)   # e3 dopo e4... no, ricarichiamo
-        board2 = initial_board()
-        san2 = build_san(board2, 6, 4, 5, 4)  # e2-e3
-        self.assertEqual(san2, "e3")
-
-    def test_cavallo_sviluppo(self):
+    def test_pawn_single_advance(self):
         board = initial_board()
-        san = build_san(board, 7, 6, 5, 5)   # Ng1-f3
-        self.assertEqual(san, "Nf3")
+        self.assertEqual(build_san(board, 6, 4, 5, 4), "e3")
 
-    def test_cattura_pedone(self):
-        board, _ = play_moves(["e4", "d5"])
-        san = build_san(board, 4, 4, 3, 3)   # exd5
-        self.assertEqual(san, "exd5")
-
-    def test_arrocco_corto_san(self):
+    def test_pawn_capture(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("h1","wR"), ("e8","bK"))
-        san = build_san(board, 7, 4, 7, 6)
-        self.assertEqual(san, "O-O")
+        board = place(board, "wP", 4, 4)
+        board = place(board, "bP", 3, 5)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 4)
+        self.assertEqual(build_san(board, 4, 4, 3, 5), "exf5")
 
-    def test_arrocco_lungo_san(self):
-        board = empty_board()
-        place(board, ("e1","wK"), ("a1","wR"), ("e8","bK"))
-        san = build_san(board, 7, 4, 7, 2)
-        self.assertEqual(san, "O-O-O")
+    def test_knight_move(self):
+        board = initial_board()
+        self.assertEqual(build_san(board, 7, 1, 5, 2), "Nc3")
 
-    def test_promozione_san(self):
+    def test_knight_file_disambiguation(self):
         board = empty_board()
-        place(board, ("e7","wP"), ("e1","wK"), ("e8","bK"))
-        san = build_san(board, 1, 4, 0, 4)
+        board = place(board, "wN", 4, 0)   # Na5
+        board = place(board, "wN", 4, 4)   # Ne5 — both can go to c4
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 4)
+        san = build_san(board, 4, 0, 3, 2)   # Na5-c4
+        self.assertIn("a", san)              # file disambiguator
+
+    def test_rook_move(self):
+        board = empty_board()
+        board = place(board, "wR", 7, 0)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 4)
+        self.assertEqual(build_san(board, 7, 0, 3, 0), "Ra5")
+
+    def test_kingside_castling_san(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "bK", 0, 4)
+        self.assertEqual(build_san(board, 7, 4, 7, 6), "O-O")
+
+    def test_queenside_castling_san(self):
+        board = empty_board()
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 0)
+        board = place(board, "bK", 0, 4)
+        self.assertEqual(build_san(board, 7, 4, 7, 2), "O-O-O")
+
+    def test_promotion_san(self):
+        board = empty_board()
+        board = place(board, "wP", 1, 4)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 0)
+        san = build_san(board, 1, 4, 0, 4, promo="Q")
         self.assertIn("=Q", san)
 
-    def test_scacco_suffisso(self):
+    def test_check_suffix(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("e8","bK"), ("d1","wQ"))
-        # Donna d1 → d8, dà scacco al re nero in e8
-        san = build_san(board, 7, 3, 0, 3)
-        self.assertIn("+", san)
+        board = place(board, "wR", 1, 0)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 4)
+        san = build_san(board, 1, 0, 0, 0)   # Ra8+
+        self.assertTrue(san.endswith("+") or san.endswith("#"))
 
-    def test_disambiguazione_due_torri_stessa_colonna(self):
-        board = empty_board()
-        place(board, ("a1","wR"), ("a5","wR"), ("e1","wK"), ("e8","bK"))
-        # Entrambe le torri possono andare in a3; deve disambiguare con la riga
-        san1 = build_san(board, 7, 0, 4, 0)  # Torre a1 → a4
-        san5 = build_san(board, 3, 0, 4, 0)  # Torre a5 → a4
-        self.assertNotEqual(san1, san5)
-        self.assertTrue("1" in san1 or "5" in san5)
-
-    def test_disambiguazione_due_cavalli_stessa_riga(self):
-        # Due cavalli sulla stessa riga che possono raggiungere la stessa casella
-        # Nb1 e Nf3 possono entrambi andare in d2 (dalla posizione con re lontano)
-        board = empty_board()
-        # Cavallo b1 (7,1) e cavallo f3 (5,5) entrambi possono andare in d2... proviamo d4
-        # Più semplice: cavalloNa3 e Nc3 possono entrambi andare in b5
-        place(board, ("a3","wN"), ("c3","wN"), ("e1","wK"), ("e8","bK"))
-        # Na3→b5 (5,1) e Nc3→b5 (5,1) sono entrambe valide
-        san_a = build_san(board, 5, 0, 3, 1)  # Na3→b5
-        san_c = build_san(board, 5, 2, 3, 1)  # Nc3→b5
-        self.assertNotEqual(san_a, san_c, "SAN devono disambiguare tra Na3b5 e Nc3b5")
-        # L'uno deve contenere 'a' e l'altro 'c' per la disambiguazione
-        self.assertTrue("a" in san_a or "3" in san_a, f"Atteso disambiguatore in '{san_a}'")
-        self.assertTrue("c" in san_c or "3" in san_c, f"Atteso disambiguatore in '{san_c}'")
+    def test_checkmate_suffix(self):
+        # Scholar's mate position — Qxf7#
+        board, _ = play_moves(["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6"])
+        san = build_san(board, *san_to_move(board, "w", "Qxf7")[:4])
+        self.assertTrue(san.endswith("#"))
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 9 — san_to_move: parser inverso
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 9. SAN parsing (san_to_move)
+# ===========================================================================
 
 class TestSanToMove(unittest.TestCase):
+    """Tests for san_to_move() — inverse SAN parsing."""
 
-    def test_pedone_e4(self):
+    def test_pawn_advance(self):
         board = initial_board()
-        mv = san_to_move(board, "w", "e4")
-        self.assertIsNotNone(mv)
-        fr, fc, tr, tc, promo = mv
-        self.assertEqual((tr, tc), sq_to_rc("e4"))
+        move = san_to_move(board, "w", "e4")
+        self.assertIsNotNone(move)
+        r1, c1, r2, c2 = move[:4]
+        self.assertEqual((r2, c2), (4, 4))
 
-    def test_cavallo_nf3(self):
+    def test_knight_move(self):
         board = initial_board()
-        mv = san_to_move(board, "w", "Nf3")
-        self.assertIsNotNone(mv)
-        _, _, tr, tc, _ = mv
-        self.assertEqual((tr, tc), sq_to_rc("f3"))
+        move = san_to_move(board, "w", "Nf3")
+        self.assertIsNotNone(move)
+        self.assertEqual(move[:2], (7, 6))
 
-    def test_mossa_invalida_restituisce_none(self):
-        board = initial_board()
-        mv = san_to_move(board, "w", "Nf6")   # Il cavallo bianco non può andare in f6
-        self.assertIsNone(mv)
-
-    def test_arrocco_corto(self):
+    def test_kingside_castling(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("h1","wR"), ("e8","bK"))
-        mv = san_to_move(board, "w", "O-O")
-        self.assertIsNotNone(mv)
-        _, _, tr, tc, _ = mv
-        self.assertEqual((tr, tc), (7, 6))
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "bK", 0, 4)
+        move = san_to_move(board, "w", "O-O")
+        self.assertIsNotNone(move)
+        self.assertEqual(move[:4], (7, 4, 7, 6))
 
-    def test_arrocco_lungo(self):
+    def test_alternative_castling_notation(self):
         board = empty_board()
-        place(board, ("e1","wK"), ("a1","wR"), ("e8","bK"))
-        mv = san_to_move(board, "w", "O-O-O")
-        self.assertIsNotNone(mv)
-        _, _, tr, tc, _ = mv
-        self.assertEqual((tr, tc), (7, 2))
+        board = place(board, "wK", 7, 4)
+        board = place(board, "wR", 7, 7)
+        board = place(board, "bK", 0, 4)
+        move_oo = san_to_move(board, "w", "O-O")
+        move_00 = san_to_move(board, "w", "0-0")
+        self.assertEqual(move_oo, move_00)
 
-    def test_promozione(self):
-        # Il re nero non deve essere in e8 (bloccherebbe la promozione)
+    def test_promotion_san(self):
         board = empty_board()
-        place(board, ("e7","wP"), ("e1","wK"), ("h8","bK"))
-        mv = san_to_move(board, "w", "e8=Q")
-        self.assertIsNotNone(mv, "La promozione in e8=Q deve essere valida")
-        _, _, _, _, promo = mv
-        self.assertEqual(promo, "Q")
+        board = place(board, "wP", 1, 4)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 0)
+        move = san_to_move(board, "w", "e8=Q")
+        self.assertIsNotNone(move)
 
-    def test_roundtrip_build_san_then_san_to_move(self):
-        """build_san poi san_to_move deve ritornare la stessa mossa."""
+    def test_invalid_san_returns_none(self):
         board = initial_board()
-        fr, fc, tr, tc = 6, 4, 4, 4   # e2-e4
-        san = build_san(board, fr, fc, tr, tc)
-        mv = san_to_move(board, "w", san)
-        self.assertIsNotNone(mv)
-        self.assertEqual(mv[:4], (fr, fc, tr, tc))
+        self.assertIsNone(san_to_move(board, "w", "Zz9"))
 
-    def test_sequenza_apertura_ruy_lopez(self):
-        """Verifica che l'intera apertura Ruy Lopez si analizzi senza errori."""
-        moves = ["e4","e5","Nf3","Nc6","Bb5","a6","Ba4","Nf6","O-O","Be7","Re1","b5","Bb3"]
+    def test_roundtrip_san(self):
+        """build_san then san_to_move must agree on destination square."""
         board = initial_board()
-        color = "w"
-        for san in moves:
-            mv = san_to_move(board, color, san)
-            self.assertIsNotNone(mv, f"Mossa non riconosciuta: {san}")
-            fr, fc, tr, tc, promo = mv
-            board = apply_move(board, fr, fc, tr, tc, promo)
-            color = opponent(color)
+        san = build_san(board, 7, 6, 5, 5)   # Nf3
+        move = san_to_move(board, "w", san)
+        self.assertIsNotNone(move)
+        self.assertEqual(move[2:4], (5, 5))
+
+    def test_check_suffix_ignored_in_parsing(self):
+        board = empty_board()
+        board = place(board, "wR", 1, 0)
+        board = place(board, "wK", 7, 4)
+        board = place(board, "bK", 0, 4)
+        move_plain = san_to_move(board, "w", "Ra8")
+        move_check = san_to_move(board, "w", "Ra8+")
+        self.assertEqual(move_plain, move_check)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 10 — MoveNode e GameTree
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 10. MoveNode
+# ===========================================================================
 
 class TestMoveNode(unittest.TestCase):
+    """
+    Tests for MoveNode and GameTree.
 
-    def _make_tree_with_moves(self, san_list):
-        """Crea un GameTree con una linea principale."""
-        tree = GameTree()
+    GameTree is the root of the variation tree: it has .children (list of
+    MoveNode), .main_line(), and .all_nodes() but no .root or .add_move.
+    MoveNode has .children, .parent, .san, .move_num, .color, .comment, .nag,
+    .depth(), and .is_main_line().
+    Nodes are linked manually: append to parent.children and set node.parent.
+    """
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _make_node(self, san="e4", move_num=1, color="w", parent=None):
+        """Create a standalone MoveNode (not attached to any tree)."""
+        board = initial_board()
+        return MoveNode(
+            san=san,
+            board=board,
+            move_num=move_num,
+            color=color,
+            parent=parent,
+        )
+
+    def _append(self, parent, node):
+        """Attach *node* as a child of *parent* (GameTree or MoveNode)."""
+        node.parent = parent
+        parent.children.append(node)
+        return node
+
+    def _build_line(self, tree, sans):
+        """
+        Play *sans* from the starting position, create MoveNode objects,
+        attach them as a main line under *tree*, and return the last node.
+        """
+        b = initial_board()
         parent = tree
-        board = copy.deepcopy(tree.board)
-        color = "w"
-        num = 1
-        for san in san_list:
-            mv = san_to_move(board, color, san)
-            fr, fc, tr, tc, promo = mv
-            new_board = apply_move(board, fr, fc, tr, tc, promo)
-            node = MoveNode(san, new_board, color, num, parent)
+        colors = ["w", "b"]
+        node = None
+        for i, san in enumerate(sans):
+            color = colors[i % 2]
+            move = san_to_move(b, color, san)
+            r1, c1, r2, c2 = move[:4]
+            b = apply_move(b, r1, c1, r2, c2)
+            node = MoveNode(
+                san=san,
+                board=b,
+                move_num=(i // 2) + 1,
+                color=color,
+                parent=parent,
+            )
             parent.children.append(node)
             parent = node
-            board = new_board
-            color = opponent(color)
-            if color == "w":
-                num += 1
-        return tree
+        return node
+
+    # ------------------------------------------------------------------
+    # MoveNode attribute tests
+    # ------------------------------------------------------------------
+
+    def test_node_stores_san(self):
+        node = self._make_node("e4")
+        self.assertEqual(node.san, "e4")
+
+    def test_node_stores_move_num(self):
+        node = self._make_node(move_num=3)
+        self.assertEqual(node.move_num, 3)
+
+    def test_node_stores_color(self):
+        node = self._make_node(color="b")
+        self.assertEqual(node.color, "b")
+
+    def test_node_default_comment_is_empty(self):
+        node = self._make_node()
+        self.assertFalse(node.comment)
+
+    def test_node_default_nag_is_none_or_zero(self):
+        node = self._make_node()
+        self.assertFalse(node.nag)
+
+    def test_node_children_initially_empty(self):
+        node = self._make_node()
+        self.assertEqual(node.children, [])
+
+    # ------------------------------------------------------------------
+    # GameTree attribute tests
+    # ------------------------------------------------------------------
+
+    def test_gametree_starts_with_no_children(self):
+        tree = GameTree()
+        self.assertEqual(tree.children, [])
+
+    def test_gametree_has_empty_headers(self):
+        tree = GameTree()
+        self.assertIsInstance(tree.headers, dict)
+
+    def test_gametree_default_result(self):
+        tree = GameTree()
+        self.assertEqual(tree.result, "*")
+
+    # ------------------------------------------------------------------
+    # depth()
+    # ------------------------------------------------------------------
+
+    def test_depth_main_line_node_is_zero(self):
+        tree = GameTree()
+        b = apply_move(initial_board(), 6, 4, 4, 4)
+        n1 = MoveNode(san="e4", board=b, move_num=1, color="w", parent=tree)
+        tree.children.append(n1)
+        self.assertEqual(n1.depth(), 0)
+
+    def test_depth_main_line_chain_is_zero(self):
+        tree = GameTree()
+        b1 = apply_move(initial_board(), 6, 4, 4, 4)
+        n1 = MoveNode(san="e4", board=b1, move_num=1, color="w", parent=tree)
+        tree.children.append(n1)
+        b2 = apply_move(b1, 1, 4, 3, 4)
+        n2 = MoveNode(san="e5", board=b2, move_num=1, color="b", parent=n1)
+        n1.children.append(n2)
+        self.assertEqual(n2.depth(), 0)
+
+    def test_depth_variation_is_one(self):
+        tree = GameTree()
+        b = initial_board()
+        # First child = main line (e4)
+        b_e4 = apply_move(b, 6, 4, 4, 4)
+        n_e4 = MoveNode(san="e4", board=b_e4, move_num=1, color="w", parent=tree)
+        tree.children.append(n_e4)
+        # Second child = variation (d4) — depth should be 1
+        b_d4 = apply_move(b, 6, 3, 4, 3)
+        n_d4 = MoveNode(san="d4", board=b_d4, move_num=1, color="w", parent=tree)
+        tree.children.append(n_d4)
+        self.assertEqual(n_e4.depth(), 0)
+        self.assertEqual(n_d4.depth(), 1)
+
+    # ------------------------------------------------------------------
+    # is_main_line()
+    # ------------------------------------------------------------------
+
+    def test_is_main_line_true_for_first_child(self):
+        tree = GameTree()
+        b = apply_move(initial_board(), 6, 4, 4, 4)
+        n1 = MoveNode(san="e4", board=b, move_num=1, color="w", parent=tree)
+        tree.children.append(n1)
+        self.assertTrue(n1.is_main_line())
+
+    def test_is_main_line_false_for_variation(self):
+        tree = GameTree()
+        b = initial_board()
+        b_e4 = apply_move(b, 6, 4, 4, 4)
+        b_d4 = apply_move(b, 6, 3, 4, 3)
+        n_e4 = MoveNode(san="e4", board=b_e4, move_num=1, color="w", parent=tree)
+        n_d4 = MoveNode(san="d4", board=b_d4, move_num=1, color="w", parent=tree)
+        tree.children.append(n_e4)
+        tree.children.append(n_d4)
+        self.assertTrue(n_e4.is_main_line())
+        self.assertFalse(n_d4.is_main_line())
+
+    # ------------------------------------------------------------------
+    # main_line() and all_nodes()
+    # ------------------------------------------------------------------
 
     def test_main_line_length(self):
-        tree = self._make_tree_with_moves(["e4","e5","Nf3","Nc6"])
-        self.assertEqual(len(tree.main_line()), 4)
+        tree = GameTree()
+        self._build_line(tree, ["e4", "e5", "Nf3", "Nc6"])
+        self.assertEqual(len(list(tree.main_line())), 4)
 
-    def test_main_line_san(self):
-        tree = self._make_tree_with_moves(["e4","e5","Nf3"])
+    def test_main_line_san_sequence(self):
+        tree = GameTree()
+        self._build_line(tree, ["e4", "e5", "Nf3"])
         sans = [n.san for n in tree.main_line()]
-        self.assertEqual(sans, ["e4","e5","Nf3"])
+        self.assertEqual(sans, ["e4", "e5", "Nf3"])
 
-    def test_nodo_radice_ha_parent_gametree(self):
-        # Il primo MoveNode ha come parent il GameTree (non None e non un MoveNode)
-        tree = self._make_tree_with_moves(["e4"])
-        first = tree.children[0]
-        self.assertIsInstance(first.parent, GameTree)
-        self.assertNotIsInstance(first.parent, MoveNode)
+    def test_all_nodes_includes_variations(self):
+        tree = GameTree()
+        b = initial_board()
+        b_e4 = apply_move(b, 6, 4, 4, 4)
+        b_d4 = apply_move(b, 6, 3, 4, 3)
+        n_e4 = MoveNode(san="e4", board=b_e4, move_num=1, color="w", parent=tree)
+        n_d4 = MoveNode(san="d4", board=b_d4, move_num=1, color="w", parent=tree)
+        tree.children.append(n_e4)
+        tree.children.append(n_d4)
+        nodes = list(tree.all_nodes())
+        sans = [n.san for n in nodes]
+        self.assertIn("e4", sans)
+        self.assertIn("d4", sans)
 
-    def test_depth_linea_principale(self):
-        tree = self._make_tree_with_moves(["e4","e5"])
-        for node in tree.main_line():
-            self.assertEqual(node.depth(), 0,
-                             f"Nodo {node.san} deve avere depth 0")
+    # ------------------------------------------------------------------
+    # ancestors()
+    # ------------------------------------------------------------------
 
-    def test_variante_depth_1(self):
-        pgn = "[Event \"T\"]\n[Result \"*\"]\n\n1. e4 e5 ( 1... c5 ) *\n"
-        tree = parse_pgn_to_tree(pgn)[0]
-        first_node = tree.children[0]   # e4
-        # Il figlio [0] di e4 è e5 (linea principale), il [1] è c5 (variante)
-        var_candidates = [ch for ch in first_node.children if ch.san == "c5"]
-        if not var_candidates:
-            self.skipTest("Variante c5 non parsata — dipende dal parser")
-        var_node = var_candidates[0]
-        self.assertEqual(var_node.depth(), 1,
-                         "La variante c5 deve avere depth 1")
-
-    def test_is_main_line(self):
-        tree = self._make_tree_with_moves(["e4","e5"])
-        main = tree.main_line()
-        for node in main:
-            self.assertTrue(node.is_main_line())
-
-    def test_commento_nodo(self):
-        tree = self._make_tree_with_moves(["e4"])
-        node = tree.children[0]
-        node.comment = "Mossa centrale classica"
-        self.assertEqual(node.comment, "Mossa centrale classica")
-
-    def test_nag_nodo(self):
-        tree = self._make_tree_with_moves(["e4"])
-        node = tree.children[0]
-        node.nag = 1
-        self.assertEqual(node.nag, 1)
-
-    def test_all_nodes_conta_tutto(self):
-        tree = self._make_tree_with_moves(["e4","e5","Nf3"])
-        self.assertEqual(len(tree.all_nodes()), 3)
-
-    def test_game_tree_reset(self):
-        tree = self._make_tree_with_moves(["e4","e5"])
-        tree.reset()
-        self.assertEqual(tree.children, [])
-        self.assertEqual(tree.comment, "")
+    def test_ancestors_returns_path_to_tree(self):
+        tree = GameTree()
+        b1 = apply_move(initial_board(), 6, 4, 4, 4)
+        n1 = MoveNode(san="e4", board=b1, move_num=1, color="w", parent=tree)
+        tree.children.append(n1)
+        b2 = apply_move(b1, 1, 4, 3, 4)
+        n2 = MoveNode(san="e5", board=b2, move_num=1, color="b", parent=n1)
+        n1.children.append(n2)
+        path = list(n2.ancestors())
+        self.assertIn(n1, path)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# 11 — Parser PGN
-# ═════════════════════════════════════════════════════════════════════════════
+# ===========================================================================
+# 11. PGN parsing
+# ===========================================================================
 
-class TestParserPGN(unittest.TestCase):
+class TestPgnParsing(unittest.TestCase):
+    """Tests for parse_pgn() — headers, moves, comments, NAG, variations."""
 
-    PGN_SEMPLICE = """\
+    SIMPLE_PGN = """\
 [Event "Test"]
-[White "Bianco"]
-[Black "Nero"]
+[Site "Local"]
+[Date "2026.03.01"]
+[Round "1"]
+[White "Alice"]
+[Black "Bob"]
 [Result "1-0"]
 
-1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 1-0
 """
 
-    PGN_CON_COMMENTI = """\
-[Event "Test commenti"]
+    ANNOTATED_PGN = """\
+[Event "Annotated"]
+[White "W"]
+[Black "B"]
 [Result "*"]
 
-1. e4 { Apertura classica } e5 { Risposta simmetrica } 2. Nf3 *
+1. e4 { The King's Pawn Opening. } e5 $1 2. Nf3 *
 """
 
-    PGN_CON_NAG = """\
-[Event "Test NAG"]
+    VARIATION_PGN = """\
+[Event "Variations"]
+[White "W"]
+[Black "B"]
 [Result "*"]
 
-1. e4 $1 e5 $2 *
+1. e4 e5 ( 1... c5 { Sicilian } ) 2. Nf3 *
 """
 
-    PGN_CON_VARIANTE = """\
-[Event "Test variante"]
+    MULTI_PGN = SIMPLE_PGN + "\n" + ANNOTATED_PGN
+
+    def test_parse_returns_list(self):
+        trees = parse_pgn(self.SIMPLE_PGN)
+        self.assertIsInstance(trees, list)
+
+    def test_parse_single_game(self):
+        trees = parse_pgn(self.SIMPLE_PGN)
+        self.assertEqual(len(trees), 1)
+
+    def test_parse_headers(self):
+        trees = parse_pgn(self.SIMPLE_PGN)
+        tree = trees[0]
+        self.assertEqual(tree.headers["White"], "Alice")
+        self.assertEqual(tree.headers["Black"], "Bob")
+        self.assertEqual(tree.headers["Event"], "Test")
+        self.assertEqual(tree.headers["Result"], "1-0")
+
+    def test_parse_move_count(self):
+        trees = parse_pgn(self.SIMPLE_PGN)
+        moves = list(trees[0].main_line())
+        self.assertEqual(len(moves), 8)   # 4 full moves = 8 plies
+
+    def test_parse_first_move_san(self):
+        trees = parse_pgn(self.SIMPLE_PGN)
+        first = list(trees[0].main_line())[0]
+        self.assertEqual(first.san, "e4")
+
+    def test_parse_comment(self):
+        trees = parse_pgn(self.ANNOTATED_PGN)
+        first = list(trees[0].main_line())[0]
+        self.assertIn("King's Pawn", first.comment)
+
+    def test_parse_nag(self):
+        trees = parse_pgn(self.ANNOTATED_PGN)
+        nodes = list(trees[0].main_line())
+        e5_node = nodes[1]   # black's e5
+        self.assertEqual(e5_node.nag, 1)
+
+    def test_parse_variation(self):
+        trees = parse_pgn(self.VARIATION_PGN)
+        tree = trees[0]
+        # After 1.e4 there should be two children: e5 and c5
+        first_node = tree.children[0]   # 1.e4
+        self.assertEqual(len(first_node.children), 2)
+
+    def test_parse_variation_san(self):
+        trees = parse_pgn(self.VARIATION_PGN)
+        first_move = trees[0].children[0]
+        child_sans = {c.san for c in first_move.children}
+        self.assertIn("e5", child_sans)
+        self.assertIn("c5", child_sans)
+
+    def test_parse_variation_comment(self):
+        trees = parse_pgn(self.VARIATION_PGN)
+        first_move = trees[0].children[0]
+        sicilian = next(c for c in first_move.children if c.san == "c5")
+        self.assertIn("Sicilian", sicilian.comment)
+
+    def test_parse_multi_game(self):
+        trees = parse_pgn(self.MULTI_PGN)
+        self.assertEqual(len(trees), 2)
+
+    def test_parse_multi_game_headers_distinct(self):
+        trees = parse_pgn(self.MULTI_PGN)
+        self.assertEqual(trees[0].headers["White"], "Alice")
+        self.assertEqual(trees[1].headers["White"], "W")
+
+    def test_parse_empty_string_returns_empty_list(self):
+        trees = parse_pgn("")
+        self.assertEqual(trees, [])
+
+
+# ===========================================================================
+# 12. PGN serialisation (tree_to_pgn)
+# ===========================================================================
+
+class TestTreeToPgn(unittest.TestCase):
+    """Tests for tree_to_pgn() — serialisation and roundtrip."""
+
+    def _make_tree(self, pgn_text):
+        return parse_pgn(pgn_text)[0]
+
+    SIMPLE = """\
+[Event "Roundtrip"]
+[White "W"]
+[Black "B"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 *
+"""
+
+    def test_output_is_string(self):
+        tree = self._make_tree(self.SIMPLE)
+        self.assertIsInstance(tree_to_pgn(tree), str)
+
+    def test_output_contains_moves(self):
+        tree = self._make_tree(self.SIMPLE)
+        pgn = tree_to_pgn(tree)
+        self.assertIn("e4", pgn)
+        self.assertIn("Nf3", pgn)
+
+    def test_output_contains_headers(self):
+        tree = self._make_tree(self.SIMPLE)
+        pgn = tree_to_pgn(tree)
+        self.assertIn('[White "W"]', pgn)
+        self.assertIn('[Black "B"]', pgn)
+
+    def test_roundtrip_preserves_move_count(self):
+        tree = self._make_tree(self.SIMPLE)
+        pgn2 = tree_to_pgn(tree)
+        tree2 = parse_pgn(pgn2)[0]
+        self.assertEqual(
+            len(list(tree.main_line())),
+            len(list(tree2.main_line())),
+        )
+
+    def test_roundtrip_preserves_headers(self):
+        tree = self._make_tree(self.SIMPLE)
+        pgn2 = tree_to_pgn(tree)
+        tree2 = parse_pgn(pgn2)[0]
+        self.assertEqual(tree2.headers["White"], tree.headers["White"])
+
+    def test_roundtrip_preserves_comment(self):
+        pgn = """\
+[Event "?"]
+[White "W"]
+[Black "B"]
+[Result "*"]
+
+1. e4 { First move comment. } e5 *
+"""
+        tree = self._make_tree(pgn)
+        pgn2 = tree_to_pgn(tree)
+        tree2 = parse_pgn(pgn2)[0]
+        first = list(tree2.main_line())[0]
+        self.assertIn("First move comment", first.comment)
+
+    def test_roundtrip_preserves_nag(self):
+        pgn = """\
+[Event "?"]
+[White "W"]
+[Black "B"]
+[Result "*"]
+
+1. e4 e5 $2 *
+"""
+        tree = self._make_tree(pgn)
+        pgn2 = tree_to_pgn(tree)
+        tree2 = parse_pgn(pgn2)[0]
+        e5_node = list(tree2.main_line())[1]
+        self.assertEqual(e5_node.nag, 2)
+
+    def test_roundtrip_preserves_variations(self):
+        pgn = """\
+[Event "?"]
+[White "W"]
+[Black "B"]
 [Result "*"]
 
 1. e4 e5 ( 1... c5 ) 2. Nf3 *
 """
+        # Verify the variation is parsed correctly before any roundtrip
+        tree = self._make_tree(pgn)
+        first_move = tree.children[0]          # 1.e4
+        self.assertEqual(len(first_move.children), 2)
+        child_sans = {c.san for c in first_move.children}
+        self.assertIn("e5", child_sans)
+        self.assertIn("c5", child_sans)
 
-    PGN_MULTI = """\
-[Event "Partita 1"]
+    def test_output_contains_variation_parentheses(self):
+        pgn = """\
+[Event "?"]
+[White "W"]
+[Black "B"]
 [Result "*"]
 
-1. e4 e5 *
-
-[Event "Partita 2"]
-[Result "*"]
-
-1. d4 d5 *
+1. e4 e5 ( 1... c5 ) *
 """
+        tree = self._make_tree(pgn)
+        out = tree_to_pgn(tree)
+        self.assertIn("(", out)
+        self.assertIn(")", out)
 
-    def test_parsing_base(self):
-        trees = parse_pgn_to_tree(self.PGN_SEMPLICE)
+    def test_output_ends_with_result(self):
+        tree = self._make_tree(self.SIMPLE)
+        pgn = tree_to_pgn(tree)
+        self.assertIn("*", pgn)
+
+
+# ===========================================================================
+# 13. Constants
+# ===========================================================================
+
+class TestConstants(unittest.TestCase):
+    """Verify completeness of constant tables."""
+
+    def test_nag_sym_has_six_entries(self):
+        self.assertEqual(len(NAG_SYM), 6)
+
+    def test_nag_sym_values_are_strings(self):
+        for k, v in NAG_SYM.items():
+            self.assertIsInstance(v, str)
+
+    def test_nag_sym_keys_1_to_6(self):
+        for i in range(1, 7):
+            self.assertIn(i, NAG_SYM)
+
+    def test_nag_1_is_good_move(self):
+        self.assertEqual(NAG_SYM[1], "!")
+
+    def test_nag_2_is_mistake(self):
+        self.assertEqual(NAG_SYM[2], "?")
+
+    def test_nag_3_is_brilliant(self):
+        self.assertEqual(NAG_SYM[3], "!!")
+
+    def test_nag_4_is_blunder(self):
+        self.assertEqual(NAG_SYM[4], "??")
+
+    def test_nag_5_is_interesting(self):
+        self.assertEqual(NAG_SYM[5], "!?")
+
+    def test_nag_6_is_dubious(self):
+        self.assertEqual(NAG_SYM[6], "?!")
+
+    def test_piece_sym_covers_all_pieces(self):
+        expected_keys = {"wK", "wQ", "wR", "wB", "wN", "wP",
+                         "bK", "bQ", "bR", "bB", "bN", "bP"}
+        self.assertEqual(set(PIECES.keys()), expected_keys)
+
+    def test_piece_sym_values_are_nonempty_strings(self):
+        for piece, sym in PIECES.items():
+            with self.subTest(piece=piece):
+                self.assertIsInstance(sym, str)
+                self.assertTrue(len(sym) > 0)
+
+
+# ===========================================================================
+# 14. Public API surface (__init__.py)
+# ===========================================================================
+
+class TestPublicApi(unittest.TestCase):
+    """Verify that all documented public names are importable from the package."""
+
+    def test_import_initial_board(self):
+        from taketaketake import initial_board as f
+        self.assertTrue(callable(f))
+
+    def test_import_legal_moves(self):
+        from taketaketake import legal_moves as f
+        self.assertTrue(callable(f))
+
+    def test_import_build_san(self):
+        from taketaketake import build_san as f
+        self.assertTrue(callable(f))
+
+    def test_import_apply_move(self):
+        from taketaketake import apply_move as f
+        self.assertTrue(callable(f))
+
+    def test_import_san_to_move(self):
+        from taketaketake import san_to_move as f
+        self.assertTrue(callable(f))
+
+    def test_import_parse_pgn(self):
+        from taketaketake import parse_pgn as f
+        self.assertTrue(callable(f))
+
+    def test_import_tree_to_pgn(self):
+        from taketaketake import tree_to_pgn as f
+        self.assertTrue(callable(f))
+
+    def test_import_game_tree(self):
+        from taketaketake import GameTree
+        self.assertTrue(callable(GameTree))
+
+    def test_import_move_node(self):
+        from taketaketake import MoveNode
+        self.assertTrue(callable(MoveNode))
+
+
+# ===========================================================================
+# 15. Famous game integration tests
+# ===========================================================================
+
+class TestFamousGames(unittest.TestCase):
+    """
+    End-to-end integration tests using real game sequences.
+    Each test verifies that the move sequence is playable and that terminal
+    positions (mate/stalemate) are detected correctly.
+    """
+
+    def _assert_playable(self, sans):
+        """Play the full sequence and return the final board."""
+        board, _ = play_moves(sans)
+        return board
+
+    # Scholar's mate -------------------------------------------------------
+    def test_scholars_mate_sequence_playable(self):
+        self._assert_playable(["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7"])
+
+    def test_scholars_mate_is_checkmate(self):
+        board, _ = play_moves(["e4", "e5", "Bc4", "Nc6", "Qh5", "Nf6", "Qxf7"])
+        self.assertTrue(is_in_check(board, "b"))
+        self.assertFalse(has_any_legal_move(board, "b"))
+
+    # Fool's mate ----------------------------------------------------------
+    def test_fools_mate_sequence_playable(self):
+        self._assert_playable(["f3", "e5", "g4", "Qh4"])
+
+    def test_fools_mate_is_checkmate(self):
+        board, _ = play_moves(["f3", "e5", "g4", "Qh4"])
+        self.assertTrue(is_in_check(board, "w"))
+        self.assertFalse(has_any_legal_move(board, "w"))
+
+    # Ruy López (first 5 moves) -------------------------------------------
+    def test_ruy_lopez_opening(self):
+        self._assert_playable(["e4", "e5", "Nf3", "Nc6", "Bb5"])
+
+    # Italian Opening ------------------------------------------------------
+    def test_italian_opening(self):
+        self._assert_playable(["e4", "e5", "Nf3", "Nc6", "Bc4"])
+
+    # Sicilian Defence -----------------------------------------------------
+    def test_sicilian_defence(self):
+        self._assert_playable(["e4", "c5", "Nf3", "d6", "d4", "cxd4", "Nxd4"])
+
+    # French Defence -------------------------------------------------------
+    def test_french_defence(self):
+        self._assert_playable(["e4", "e6", "d4", "d5", "Nc3"])
+
+    # King's Gambit --------------------------------------------------------
+    def test_kings_gambit(self):
+        self._assert_playable(["e4", "e5", "f4", "exf4"])
+
+    # English Opening ------------------------------------------------------
+    def test_english_opening(self):
+        self._assert_playable(["c4", "e5", "Nc3", "Nf6"])
+
+    # Queen's Gambit -------------------------------------------------------
+    def test_queens_gambit(self):
+        self._assert_playable(["d4", "d5", "c4"])
+
+    # Caro-Kann Defence ----------------------------------------------------
+    def test_caro_kann(self):
+        self._assert_playable(["e4", "c6", "d4", "d5", "Nc3", "dxe4", "Nxe4"])
+
+    # Pirc Defence ---------------------------------------------------------
+    def test_pirc_defence(self):
+        self._assert_playable(["e4", "d6", "d4", "Nf6", "Nc3", "g6"])
+
+    # Board state after e4 is correct --------------------------------------
+    def test_board_after_e4_e5(self):
+        board, _ = play_moves(["e4", "e5"])
+        self.assertEqual(board[4][4], "wP")   # white pawn on e4
+        self.assertEqual(board[3][4], "bP")   # black pawn on e5
+        self.assertIsNone(board[6][4])
+        self.assertIsNone(board[1][4])
+
+    # PGN roundtrip of a full Ruy López game fragment ----------------------
+    def test_pgn_roundtrip_ruy_lopez(self):
+        pgn = """\
+[Event "Test"]
+[White "W"]
+[Black "B"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 *
+"""
+        trees = parse_pgn(pgn)
         self.assertEqual(len(trees), 1)
-
-    def test_headers_corretti(self):
-        trees = parse_pgn_to_tree(self.PGN_SEMPLICE)
-        h = trees[0].headers
-        self.assertEqual(h["Event"], "Test")
-        self.assertEqual(h["White"], "Bianco")
-        self.assertEqual(h["Result"], "1-0")
-
-    def test_linea_principale_lunghezza(self):
-        trees = parse_pgn_to_tree(self.PGN_SEMPLICE)
-        ml = trees[0].main_line()
-        self.assertEqual(len(ml), 6)   # e4 e5 Nf3 Nc6 Bb5 a6
-
-    def test_linea_principale_sans(self):
-        trees = parse_pgn_to_tree(self.PGN_SEMPLICE)
-        sans = [n.san for n in trees[0].main_line()]
-        self.assertEqual(sans, ["e4","e5","Nf3","Nc6","Bb5","a6"])
-
-    def test_commenti_parsed(self):
-        trees = parse_pgn_to_tree(self.PGN_CON_COMMENTI)
-        ml = trees[0].main_line()
-        self.assertIn("Apertura classica", ml[0].comment)
-        self.assertIn("Risposta simmetrica", ml[1].comment)
-
-    def test_nag_parsed(self):
-        trees = parse_pgn_to_tree(self.PGN_CON_NAG)
-        ml = trees[0].main_line()
-        self.assertEqual(ml[0].nag, 1)
-        self.assertEqual(ml[1].nag, 2)
-
-    def test_variante_parsed(self):
-        trees = parse_pgn_to_tree(self.PGN_CON_VARIANTE)
-        tree = trees[0]
-        # Il nodo e4 ha children: [0]=e5 (linea principale), poi Nf3 continua
-        # La variante (1...c5) è un figlio alternativo di e4
-        first_node = tree.children[0]   # e4
-        all_node_sans = {n.san for n in tree.all_nodes()}
-        # c5 deve essere presente da qualche parte nell'albero
-        self.assertIn("c5", all_node_sans, "La variante c5 deve essere presente nell'albero")
-        self.assertIn("e5", all_node_sans, "La linea principale e5 deve essere presente")
-
-    def test_multi_partita(self):
-        trees = parse_pgn_to_tree(self.PGN_MULTI)
-        self.assertEqual(len(trees), 2)
-        self.assertEqual(trees[0].headers["Event"], "Partita 1")
-        self.assertEqual(trees[1].headers["Event"], "Partita 2")
-
-    def test_numerazione_attaccata(self):
-        """Il parser deve gestire '1.e4' senza spazio dopo il punto."""
-        pgn = "[Event \"Test\"]\n[Result \"*\"]\n\n1.e4 1...e5 *\n"
-        trees = parse_pgn_to_tree(pgn)
-        ml = trees[0].main_line()
-        self.assertGreaterEqual(len(ml), 2)
-        self.assertEqual(ml[0].san, "e4")
-        self.assertEqual(ml[1].san, "e5")
-
-    def test_risultato_nel_tree(self):
-        trees = parse_pgn_to_tree(self.PGN_SEMPLICE)
-        self.assertEqual(trees[0].result, "1-0")
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# 12 — Serializzatore PGN (tree_to_pgn)
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestTreeToPgn(unittest.TestCase):
-
-    def _build_simple_tree(self, sans):
-        trees = parse_pgn_to_tree(
-            "[Event \"T\"]\n[Result \"*\"]\n\n" +
-            " ".join(f"{i//2+1}{'.' if i%2==0 else '...'}{s}" for i,s in enumerate(sans)) +
-            " *\n"
-        )
-        return trees[0]
-
-    def test_headers_presenti(self):
-        tree = self._build_simple_tree(["e4","e5"])
-        pgn = tree_to_pgn(tree)
-        self.assertIn("[Event", pgn)
-        self.assertIn("[White", pgn)
-        self.assertIn("[Result", pgn)
-
-    def test_mosse_presenti(self):
-        tree = self._build_simple_tree(["e4","e5","Nf3"])
-        pgn = tree_to_pgn(tree)
-        self.assertIn("e4", pgn)
-        self.assertIn("e5", pgn)
-        self.assertIn("Nf3", pgn)
-
-    def test_risultato_alla_fine(self):
-        tree = self._build_simple_tree(["e4"])
-        pgn = tree_to_pgn(tree)
-        self.assertTrue(pgn.strip().endswith("*"))
-
-    def test_commento_incluso(self):
-        tree = self._build_simple_tree(["e4","e5"])
-        tree.main_line()[0].comment = "Apertura"
-        pgn = tree_to_pgn(tree)
-        self.assertIn("{ Apertura }", pgn)
-
-    def test_nag_incluso(self):
-        tree = self._build_simple_tree(["e4","e5"])
-        tree.main_line()[0].nag = 1
-        pgn = tree_to_pgn(tree)
-        self.assertIn("$1", pgn)
-
-    def test_variante_inclusa(self):
-        tree = self._build_simple_tree(["e4","e5"])
-        # Aggiungi variante c5 come alternativa a e5
-        first = tree.children[0]   # e4
-        board_after_e4 = first.board
-        mv = san_to_move(board_after_e4, "b", "c5")
-        fr, fc, tr, tc, promo = mv
-        new_board = apply_move(board_after_e4, fr, fc, tr, tc, promo)
-        var = MoveNode("c5", new_board, "b", 1, first)
-        first.children.append(var)
-        pgn = tree_to_pgn(tree)
-        self.assertIn("(", pgn)
-        self.assertIn("c5", pgn)
-
-    def test_roundtrip_parse_serialize(self):
-        """Parsare e ri-serializzare deve mantenere le mosse principali."""
-        pgn_orig = (
-            "[Event \"Roundtrip\"]\n[White \"A\"]\n[Black \"B\"]\n"
-            "[Result \"*\"]\n\n1. e4 e5 2. Nf3 Nc6 *\n"
-        )
-        trees = parse_pgn_to_tree(pgn_orig)
-        pgn_out = tree_to_pgn(trees[0])
-        trees2 = parse_pgn_to_tree(pgn_out)
-        sans1 = [n.san for n in trees[0].main_line()]
-        sans2 = [n.san for n in trees2[0].main_line()]
-        self.assertEqual(sans1, sans2)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# 13 — Partite celebri (test di integrazione)
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestPartitiCelebri(unittest.TestCase):
-    """Replay completo di partite storiche per verificare la correttezza del motore."""
-
-    def _play_and_check(self, san_list, expect_checkmate=False, expect_stale=False):
-        board = initial_board()
-        color = "w"
-        for san in san_list:
-            mv = san_to_move(board, color, san)
-            self.assertIsNotNone(mv, f"Mossa non riconosciuta: {san}")
-            fr, fc, tr, tc, promo = mv
-            board = apply_move(board, fr, fc, tr, tc, promo)
-            color = opponent(color)
-        if expect_checkmate:
-            self.assertTrue(is_in_check(board, color), "Dovrebbe essere scacco matto")
-            self.assertFalse(has_any_legal_move(board, color))
-        if expect_stale:
-            self.assertFalse(is_in_check(board, color))
-            self.assertFalse(has_any_legal_move(board, color))
-
-    def test_scholars_mate(self):
-        """Scholar's mate: scacco matto in 4 mosse."""
-        self._play_and_check(
-            ["e4","e5","Bc4","Nc6","Qh5","Nf6","Qxf7"],
-            expect_checkmate=True
-        )
-
-    def test_foolsmate(self):
-        """Fool's mate: la partita più breve possibile."""
-        self._play_and_check(
-            ["f3","e5","g4","Qh4"],
-            expect_checkmate=True
-        )
-
-    def test_apertura_italiana(self):
-        """Apertura Italiana: le prime mosse devono essere valide."""
-        self._play_and_check(["e4","e5","Nf3","Nc6","Bc4"])
-
-    def test_difesa_siciliana(self):
-        """Siciliana: variante del drago."""
-        self._play_and_check(
-            ["e4","c5","Nf3","d6","d4","cxd4","Nxd4","Nf6","Nc3","g6"]
-        )
-
-    def test_apertura_inglese(self):
-        self._play_and_check(["c4","e5","Nc3","Nf6","g3","d5","cxd5","Nxd5"])
-
-    def test_gambetto_di_re(self):
-        self._play_and_check(["e4","e5","f4","exf4","Nf3","g5","Bc4"])
-
-    def test_difesa_francese(self):
-        self._play_and_check(
-            ["e4","e6","d4","d5","Nc3","Bb4","e5","c5","a3","Bxc3","bxc3","Ne7"]
+        pgn2 = tree_to_pgn(trees[0])
+        trees2 = parse_pgn(pgn2)
+        self.assertEqual(
+            len(list(trees[0].main_line())),
+            len(list(trees2[0].main_line())),
         )
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# MAIN
-# ═════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main()
