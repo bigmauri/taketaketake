@@ -46,3 +46,7 @@ build/
 # ── Misc ─────────────────────────────────────────────────────────────────────
 *.log
 *.tmp
+
+# ── taketaketake configurations ─────────────────────────────────────────────────────────────────────
+taketaketake-theme.json
+taketaketake.json

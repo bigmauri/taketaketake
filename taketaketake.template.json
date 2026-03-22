@@ -1,0 +1,46 @@
+{
+  "_comment": "TakeTakeTake training flow — edit freely to personalise your thinking process.",
+  "_version": "0.1",
+
+  "sections": [
+    {
+      "title": "1 — Safety",
+      "colour": "#C84B31",
+      "questions": [
+        "Is my king safe? Any immediate mating threats?"
+      ]
+    },
+    {
+      "title": "2 — Read the imbalances",
+      "colour": "#7090C8",
+      "questions": [
+        "Material balance: who is ahead and by how much?"
+      ]
+    },
+    {
+      "title": "3 — Three questions",
+      "colour": "#50A878",
+      "questions": [
+        "What are the weaknesses in the position (mine and my opponent's)?",
+        "What is my worst placed piece, and how can I improve it?",
+        "What is my opponent's plan? What are they trying to achieve in the next few moves?"
+      ]
+    },
+    {
+      "title": "4 — Create a plan",
+      "colour": "#A89850",
+      "questions": [
+        "What is my plan?"
+        "Does my opponent have a plan I must prevent or prepare a counter to?"
+      ]
+    },
+    {
+      "title": "5 — Calculate candidates",
+      "colour": "#8CAEC8",
+      "questions": [
+        "List 3–5 candidate moves.",
+        "Play the move with the best evaluation."
+      ]
+    }
+  ]
+}

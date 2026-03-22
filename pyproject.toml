@@ -1,0 +1,65 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name            = "taketaketake"
+version         = "1.0.0"
+description     = "Applicazione desktop per scacchi — Python 3 puro, solo stdlib"
+readme          = "README.md"
+license         = { text = "MIT" }
+requires-python = ">=3.10"
+keywords        = ["scacchi", "chess", "pgn", "tkinter", "desktop"]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications",
+    "Environment :: MacOS X",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Italian",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment :: Board Games",
+    "Typing :: Typed",
+]
+
+# Nessuna dipendenza esterna — solo stdlib
+dependencies = []
+
+[project.scripts]
+taketaketake = "taketaketake.__main__:main"
+
+[project.urls]
+Homepage   = "https://github.com/your-org/taketaketake"
+Repository = "https://github.com/your-org/taketaketake"
+Issues     = "https://github.com/your-org/taketaketake/issues"
+
+# ── setuptools ────────────────────────────────────────────────────────────────
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["taketaketake*"]
+
+# ── pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths     = ["tests"]
+python_files  = ["test_*.py"]
+python_classes= ["Test*"]
+python_functions = ["test_*"]
+addopts       = "-v --tb=short"
+
+# ── coverage ──────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source   = ["taketaketake"]
+omit     = ["taketaketake/app.py"]   # GUI non testabile in headless
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+# ── pyflakes / linting ────────────────────────────────────────────────────────
+[tool.pyflakes]
+max_line_length = 100

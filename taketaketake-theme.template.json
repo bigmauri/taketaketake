@@ -1,0 +1,88 @@
+{
+  "_comment": "TakeTakeTake visual theme — edit to customise colours, fonts, and board sizing.",
+  "_version": "0.1",
+  "theme_name": "Slate Blue",
+  "board": {
+    "_comment": "Colours used on the board canvas.",
+    "light_square": "#efebe9",
+    "dark_square": "#a1887f",
+    "selected": "#F4F680",
+    "legal_move": "#ACBF60",
+    "check": "#D64545",
+    "square_px": 82
+  },
+  "palette": {
+    "_comment": "Application chrome colours.",
+    "bg": "#d7ccc8",
+    "list_bg": "#efebe9",
+    "pgn_bg": "#efebe9",
+    "var_bg": "#f3e5f5",
+    "btn_bg": "#dd2c00",
+    "btn_act": "#7986cb",
+    "border": "#2C3E54",
+    "list_sel": "#fff176"
+  },
+  "text": {
+    "_comment": "Foreground / text colours. cur_move_fg: text colour of the currently highlighted move in the PGN panel.",
+    "label": "#3e2723",
+    "button": "#3e2723",
+    "accent": "#3e2723",
+    "pgn": "#9fa8da",
+    "list": "#3e2723",
+    "variant": "#3e2723",
+    "move_num": "#456078",
+    "comment_fg": "#88BBAA",
+    "nag_inline": "#536dfe",
+    "comment_box_bg": "#f3e5f5",
+    "comment_box_fg": "#3e2723",
+    "cur_move_fg": "#3e2723"
+  },
+  "fonts": {
+    "_comment": "Font families and base sizes. Sizes are integer pt values.",
+    "serif": "Verdana",
+    "mono": "Verdana",
+    "piece_family": "Segoe UI Symbol",
+    "header_size": 14,
+    "label_size": 11,
+    "btn_size": 10,
+    "small_size": 9,
+    "tiny_size": 8,
+    "mono_size": 11,
+    "mono_small": 10,
+    "nag_size": 12,
+    "nav_size": 14
+  },
+  "nag": {
+    "_comment": "NAG annotation symbols, descriptions, and button colours.",
+    "1": {
+      "symbol": "!",
+      "description": "Good move",
+      "colour": "#6AB88A"
+    },
+    "2": {
+      "symbol": "?",
+      "description": "Mistake",
+      "colour": "#C07070"
+    },
+    "3": {
+      "symbol": "!!",
+      "description": "Brilliant move",
+      "colour": "#50A878"
+    },
+    "4": {
+      "symbol": "??",
+      "description": "Blunder",
+      "colour": "#B00020"
+    },
+    "5": {
+      "symbol": "!?",
+      "description": "Interesting move",
+      "colour": "#7090C8"
+    },
+    "6": {
+      "symbol": "?!",
+      "description": "Dubious move",
+      "colour": "#A89850"
+    }
+  }
+}

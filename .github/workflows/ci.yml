@@ -1,0 +1,206 @@
+name: CI — Test & Lint
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── JOB 1 — Lint ────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (pyflakes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyflakes
+      - name: Lint — core modules (no tkinter)
+        run: |
+          python -m pyflakes taketaketake/constants.py
+          python -m pyflakes taketaketake/engine.py
+          python -m pyflakes taketaketake/tree.py
+          python -m pyflakes taketaketake/pgn.py
+          python -m pyflakes taketaketake/__init__.py
+          python -m pyflakes taketaketake/__main__.py
+      - name: Lint — test suite
+        run: python -m pyflakes tests/test_taketaketake.py
+      - name: Lint — GUI (warning-only, richiede tkinter)
+        run: python -m pyflakes taketaketake/app.py || true
+
+  # ── JOB 2 — Test matrix ─────────────────────────────────────────────────────
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Installa tkinter
+        run: sudo apt-get update -qq && sudo apt-get install -y python3-tk
+      - name: Installa pytest + pacchetto
+        run: pip install pytest && pip install -e .
+      - name: Esegui test
+        run: |
+          python -m pytest tests/test_taketaketake.py \
+            --tb=short \
+            --junitxml=test-results-${{ matrix.python-version }}.xml \
+            -v
+      - name: Carica report JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-py${{ matrix.python-version }}
+          path: test-results-${{ matrix.python-version }}.xml
+          retention-days: 30
+
+  # ── JOB 3 — Sintassi AST ────────────────────────────────────────────────────
+  syntax:
+    name: Verifica sintassi AST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Controlla tutti i file .py
+        run: |
+          python - << 'EOF'
+          import ast, sys, pathlib
+          skip = {".git", "__pycache__", ".venv", "venv", "build", "dist"}
+          errors = []
+          for path in sorted(pathlib.Path(".").rglob("*.py")):
+              if any(p in path.parts for p in skip):
+                  continue
+              try:
+                  ast.parse(path.read_text(encoding="utf-8"))
+                  print(f"  ✓  {path}")
+              except SyntaxError as e:
+                  errors.append(f"  ✗  {path}: {e}")
+          if errors:
+              print("\nErrori:")
+              for err in errors: print(err)
+              sys.exit(1)
+          else:
+              print("\nTutti i file .py sono validi.")
+          EOF
+
+  # ── JOB 4 — Import & smoke test ─────────────────────────────────────────────
+  importcheck:
+    name: Import check
+    runs-on: ubuntu-latest
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Verifica import e smoke test
+        run: |
+          python - << 'EOF'
+          import taketaketake
+          from taketaketake import (
+              initial_board, legal_moves, build_san, san_to_move,
+              apply_move, is_in_check, has_any_legal_move,
+              MoveNode, GameTree, parse_pgn, tree_to_pgn,
+              FILES, PIECES, NAG_INFO, NAG_SYM,
+          )
+          from taketaketake.__main__ import main
+
+          board = initial_board()
+          total = sum(
+              len(legal_moves(board, r, c))
+              for r in range(8) for c in range(8)
+              if board[r][c] and board[r][c][0] == "w"
+          )
+          assert total == 20, f"Attese 20 mosse, trovate {total}"
+          assert main(["--no-gui"]) == 0
+          assert main(["--version"]) == 0
+          print("Tutti gli import e smoke test sono passati.")
+          EOF
+
+  # ── JOB 5 — Build wheel & sdist ─────────────────────────────────────────────
+  build:
+    name: Build wheel & sdist
+    runs-on: ubuntu-latest
+    needs: [test, importcheck]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - name: Costruisci artefatti
+        run: python -m build
+      - name: Verifica contenuto wheel
+        run: |
+          python - << 'EOF'
+          import zipfile, pathlib
+          wheels = list(pathlib.Path("dist").glob("*.whl"))
+          assert wheels, "Nessun wheel trovato in dist/"
+          with zipfile.ZipFile(wheels[0]) as zf:
+              names = zf.namelist()
+          required = [
+              "taketaketake/__init__.py",
+              "taketaketake/__main__.py",
+              "taketaketake/engine.py",
+              "taketaketake/tree.py",
+              "taketaketake/pgn.py",
+              "taketaketake/constants.py",
+              "taketaketake/app.py",
+          ]
+          for f in required:
+              assert any(f in n for n in names), f"Mancante nel wheel: {f}"
+          print(f"Wheel '{wheels[0].name}' contiene tutti i file attesi.")
+          EOF
+      - name: Carica dist/
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ── JOB 6 — Sentinella finale ────────────────────────────────────────────────
+  ci-ok:
+    name: CI completata ✓
+    runs-on: ubuntu-latest
+    needs: [lint, test, syntax, importcheck, build]
+    if: always()
+    steps:
+      - name: Valuta esito complessivo
+        run: |
+          results=(
+            "lint:${{ needs.lint.result }}"
+            "test:${{ needs.test.result }}"
+            "syntax:${{ needs.syntax.result }}"
+            "importcheck:${{ needs.importcheck.result }}"
+            "build:${{ needs.build.result }}"
+          )
+          failed=0
+          for entry in "${results[@]}"; do
+            name="${entry%%:*}"; status="${entry##*:}"
+            if [[ "$status" != "success" ]]; then
+              echo "  ❌  $name → $status"; failed=1
+            else
+              echo "  ✅  $name → $status"
+            fi
+          done
+          exit $failed
