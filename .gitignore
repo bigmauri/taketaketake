@@ -48,5 +48,6 @@ build/
 *.tmp
 
 # ── taketaketake configurations ─────────────────────────────────────────────────────────────────────
+data/
 taketaketake-theme.json
 taketaketake.json

@@ -672,12 +672,13 @@ class ChessApp(tk.Tk):
 
         for i in range(8):
             x = off + i * sq_size + sq_size // 2
-            for y in [off // 2, total - off // 2]:
+            for y in [total - off // 2]:
                 self.canvas.create_text(x, y, text=files_lbl[i], fill=_c.LABEL_FG,
                                         font=(self._theme.font_serif, self._theme.font_small_size), tags="label")
+
         for i in range(8):
             y = off + i * sq_size + sq_size // 2
-            for x in [off // 2, total - off // 2]:
+            for x in [off // 2, ]:
                 self.canvas.create_text(x, y, text=ranks_lbl[i], fill=_c.LABEL_FG,
                                         font=(self._theme.font_serif, self._theme.font_small_size), tags="label")
 
